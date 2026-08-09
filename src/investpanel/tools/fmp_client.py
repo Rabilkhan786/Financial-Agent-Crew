@@ -1,16 +1,19 @@
 """Financial Modeling Prep (FMP) client — company fundamentals.
 
-This is where the Financial agent will get real numbers: company profile, income
-statement, balance sheet, cash flow. For Phase 0 we only need one working call to
-prove the key and connection work. Every response is cached and every function
-returns a plain Python object plus a ``source`` string the agent can cite, so no
-financial fact ever appears without saying where it came from.
+This is where the Financial agent gets real numbers: company profile, income
+statement, balance sheet, cash flow, and TTM ratios. Every response is cached and
+returns a plain Python object plus a ``source`` string, so no financial fact ever
+appears without saying where it came from.
+
+Note: FMP retired its legacy ``/api/v3`` endpoints — they now return 403. This
+client uses the current ``stable`` API, which takes the ticker as a ``symbol``
+query parameter instead of in the path.
 """
 
 from investpanel import config
 from investpanel.tools import cache
 
-BASE_URL = "https://financialmodelingprep.com/api/v3"
+BASE_URL = "https://financialmodelingprep.com/stable"
 
 
 def _require_key() -> str:
@@ -23,17 +26,16 @@ def _require_key() -> str:
 def get_company_profile(ticker: str) -> dict:
     """Fetch the basic company profile (name, sector, price, market cap...).
 
-    Returns the first profile object plus the source URL it came from. FMP
-    returns a list with a single item for a valid ticker; we hand back that item.
+    Returns the first profile object plus the source it came from. FMP returns a
+    list with a single item for a valid ticker; we hand back that item.
     """
     key = _require_key()
     ticker = ticker.upper()
-    url = f"{BASE_URL}/profile/{ticker}"
-    source = f"FMP /profile/{ticker}"
+    source = f"FMP /stable/profile?symbol={ticker}"
     data = cache.cached_get_json(
-        url,
+        f"{BASE_URL}/profile",
         cache_key=f"fmp:profile:{ticker}",
-        params={"apikey": key},
+        params={"symbol": ticker, "apikey": key},
     )
     if not data:
         raise ValueError(f"FMP returned no profile for ticker '{ticker}'.")
@@ -45,17 +47,16 @@ def get_company_profile(ticker: str) -> dict:
 def _get_statement(endpoint: str, ticker: str, limit: int) -> list[dict]:
     """Shared helper: fetch a financial statement list, newest period first.
 
-    ``endpoint`` is an FMP path like "income-statement". We ask for a few years so
-    the Financial agent can compute year-over-year growth. Returns the raw list;
-    the agent picks the fields it needs and records the source.
+    ``endpoint`` is a stable path like "income-statement". We ask for a few years
+    (annual is the default) so the Financial agent can compute year-over-year
+    growth. Returns the raw list; the agent picks the fields it needs.
     """
     key = _require_key()
     ticker = ticker.upper()
-    url = f"{BASE_URL}/{endpoint}/{ticker}"
     data = cache.cached_get_json(
-        url,
+        f"{BASE_URL}/{endpoint}",
         cache_key=f"fmp:{endpoint}:{ticker}:{limit}",
-        params={"apikey": key, "limit": limit, "period": "annual"},
+        params={"symbol": ticker, "limit": limit, "apikey": key},
     )
     if not data:
         raise ValueError(f"FMP returned no '{endpoint}' for ticker '{ticker}'.")
@@ -81,11 +82,10 @@ def get_ratios_ttm(ticker: str) -> dict:
     """Trailing-twelve-month ratios (P/E, P/B...). Returns the single ratios dict."""
     key = _require_key()
     ticker = ticker.upper()
-    url = f"{BASE_URL}/ratios-ttm/{ticker}"
     data = cache.cached_get_json(
-        url,
+        f"{BASE_URL}/ratios-ttm",
         cache_key=f"fmp:ratios-ttm:{ticker}",
-        params={"apikey": key},
+        params={"symbol": ticker, "apikey": key},
     )
     if not data:
         raise ValueError(f"FMP returned no TTM ratios for ticker '{ticker}'.")

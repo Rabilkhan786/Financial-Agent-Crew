@@ -23,13 +23,16 @@ from investpanel.utils.tracing import init_langsmith, save_trace
 TICKER = "AAPL"  # a large, well-covered company — reliable across all three APIs
 
 
-def check_gemini() -> tuple[str, str]:
-    if not config.GEMINI_API_KEY:
-        return "SKIP", "GEMINI_API_KEY not set"
-    llm = get_llm()
+def check_llm() -> tuple[str, str]:
+    # Uses whatever provider LLM_PROVIDER selects (gemini/openai/anthropic/groq).
+    provider = config.LLM_PROVIDER
+    try:
+        llm = get_llm()
+    except RuntimeError as error:
+        return "SKIP", str(error)  # the selected provider's key isn't set
     reply = llm.invoke("Reply with the single word: OK")
     text = getattr(reply, "content", str(reply)).strip()
-    return "PASS", f"Gemini replied: {text[:40]!r}"
+    return "PASS", f"{provider} replied: {text[:40]!r}"
 
 
 def check_fmp() -> tuple[str, str]:
@@ -65,7 +68,7 @@ def main() -> None:
     init_langsmith()  # turns on LangSmith only if a key exists; never fails
 
     checks = [
-        ("1. Gemini reachable", check_gemini),
+        (f"1. LLM reachable ({config.LLM_PROVIDER})", check_llm),
         ("2. FMP profile", check_fmp),
         ("3. Alpha Vantage prices", check_alphavantage),
         ("4. Tavily search", check_tavily),

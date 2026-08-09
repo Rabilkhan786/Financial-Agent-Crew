@@ -61,7 +61,7 @@ def compute_findings(
     """
     findings: list[FinancialFinding] = []
     latest = income[0]
-    period = str(_pick(latest, "calendarYear", "date") or "latest")
+    period = str(_pick(latest, "fiscalYear", "calendarYear", "date") or "latest")
 
     # Q2 revenue growth (needs two years).
     if len(income) >= 2:
@@ -145,7 +145,7 @@ def compute_findings(
             ))
 
     # Q10 valuation: P/E, P/B, and a PEG-like valuation-vs-growth check.
-    pe = _pick(ratios, "peRatioTTM", "priceEarningsRatioTTM")
+    pe = _pick(ratios, "priceToEarningsRatioTTM", "peRatioTTM", "priceEarningsRatioTTM")
     if pe is not None:
         findings.append(_finding(
             "pe_ratio", pe, "ratio", "TTM", source,

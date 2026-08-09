@@ -35,10 +35,24 @@ LANGSMITH_API_KEY = os.getenv("LANGSMITH_API_KEY")
 LANGSMITH_PROJECT = os.getenv("LANGSMITH_PROJECT", "investpanel")
 
 # --- LLM settings ------------------------------------------------------------
-# Gemini is the default provider. The factory in llm/factory.py can swap this.
+# Which provider the factory hands out by default. Change LLM_PROVIDER in .env to
+# switch every agent at once — no code change needed. Supported values:
+#   "gemini" (Google) · "openai" (ChatGPT) · "anthropic" (Claude) · "groq"
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "gemini")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 LLM_TEMPERATURE = 0.0  # deterministic-ish: we want analysis, not creative writing
+
+# Each provider needs only its own key when it's the one selected. A default model
+# is set per provider but can be overridden in .env.
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-3-5-haiku-latest")
+
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 
 # --- External call behaviour -------------------------------------------------
 HTTP_TIMEOUT_SECONDS = 30
