@@ -83,7 +83,7 @@ survives between sessions when the user runs `/clear`.
 
 ```
 Phase 0  Skeleton, LLM factory, tracing, API clients   [~] code complete, GATE 0 pending keys
-Phase 1  Ground-truth question set, metrics            [ ] not started
+Phase 1  Ground-truth question set, metrics            [x] GATE 1 passed (mock-tested, no keys)
 Phase 2  Baseline (single LLM + search)                [ ] not started
 Phase 3  Financial + News + Risk agents                [ ] not started
 Phase 4  Manager + Analyst + cross-check loop           [ ] not started
@@ -91,18 +91,22 @@ Phase 5  Full eval, error analysis, ablation            [ ] not started
 Phase 6  Streamlit, Docker, deploy, docs                [ ] not started
 ```
 
-**Last completed:** Phase 0 code — folder structure, uv env (Python 3.11.15), config,
-cache+retry layer, FMP / Alpha Vantage / Tavily clients, article fetch, LLM factory
-(Gemini default, swappable), usage tracker, logging, tracing (local JSON always +
-LangSmith optional), all four Pydantic models with the frozen disclaimer, and
-`check_gate0.py`. Lint clean, all imports pass, disclaimer + source-required rules unit-verified.
+**Last completed:** Phase 1 — `eval/datasets/heldout_questions.py` (34 hand-built, date-
+stamped questions; 11 labeled with a real financial-vs-qualitative contradiction; writes
+`data/heldout_questions.json`) and `eval/metrics.py` (reasoning-quality via injectable LLM
+judge, contradiction catch rate, confidently-wrong rate, cost/latency). 11 unit tests pass
+(metrics + models), lint clean. GATE 1 met without keys (judge is mocked in tests).
 
-**Next action:** GATE 0 is not yet passed because the 4 API keys are missing. User must
-`cp .env.example .env`, add GEMINI / FMP / ALPHAVANTAGE / TAVILY keys, then run
-`uv run python check_gate0.py` — it must print PASS for all 5 checks. Then commit and start Phase 1.
+**USER TO REVIEW (part of GATE 1):** skim `eval/datasets/heldout_questions.py` — add/remove
+companies and sharpen any "reasonable_read" you disagree with, then re-run
+`uv run python -m eval.datasets.heldout_questions` to regenerate the JSON.
 
-**Open problems:** GATE 0 live-API verification blocked on missing keys (checks currently
-SKIP, tracing PASSes). No code known-broken.
+**Next action:** Phase 2 baseline. Code (`eval/baselines/single_llm_search.py`) can be
+written now, but GATE 2 (running it over the question set) needs live keys — blocked until
+`.env` is filled. GATE 0 live check also still pending keys.
+
+**Open problems:** Live gates (0 live-check, 2 run, 4 run) blocked on the 4 API keys in
+`.env`. All code + mock tests run without keys. No code known-broken.
 
 **Decisions made that differ from the spec:** none functional. Notes: (1) the disk-cache +
 retry logic for all three clients lives in one file `tools/cache.py` so the caching rule is

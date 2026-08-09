@@ -35,3 +35,6 @@ target-version = "py311"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Put the project root on sys.path so tests can import the top-level "eval" package
+# (the "investpanel" package is installed into the venv, so it's already importable).
+pythonpath = ["."]
