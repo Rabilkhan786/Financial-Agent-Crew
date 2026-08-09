@@ -105,6 +105,28 @@ def detect_contradictions(
             ),
         ))
 
+    # Detector 4: the market pays a premium (expensive P/E) while the fundamentals
+    # are actually shrinking (revenue or profit falling). The price implies growth
+    # the numbers don't show — a direct valuation-vs-fundamentals contradiction.
+    pe = by_metric.get("pe_ratio")
+    profit = by_metric.get("profit_growth")
+    revenue = by_metric.get("revenue_growth")
+    expensive = pe is not None and not pe.healthy
+    shrinking = (profit is not None and profit.value < 0) or (revenue is not None and revenue.value < 0)
+    if expensive and shrinking:
+        contradictions.append(Contradiction(
+            between=("financial", "news"),
+            description=(
+                f"Valuation is rich (P/E {pe.value:.0f}) but the fundamentals are shrinking "
+                "(revenue and/or profit declining) — the price implies growth the numbers don't show."
+            ),
+            follow_up_target="news",
+            follow_up_question=(
+                "What specific recent developments (new products, guidance, strategic shifts) are "
+                "cited to justify the premium valuation despite declining revenue/profit?"
+            ),
+        ))
+
     return contradictions
 
 

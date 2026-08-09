@@ -8,6 +8,7 @@ from datetime import date
 
 import pytest
 
+from investpanel.agents.analyst import detect_contradictions
 from investpanel.agents.base import BaseAgent
 from investpanel.agents.financial import compute_findings
 from investpanel.agents.news import NewsAgent
@@ -127,6 +128,37 @@ def test_risk_agent_uses_client(monkeypatch):
 
 
 # --- news (mocked search + fetch + llm) -------------------------------------
+
+def test_analyst_catches_expensive_but_shrinking(monkeypatch):
+    # Rich valuation (P/E flagged unhealthy) while profit is shrinking -> a real
+    # valuation-vs-fundamentals contradiction the analyst must catch (the Tesla case).
+    from investpanel.models.findings import FinancialFinding
+
+    financial = [
+        FinancialFinding(metric="pe_ratio", value=278.0, unit="ratio", period="TTM",
+                         source="FMP", interpretation="expensive", healthy=False),
+        FinancialFinding(metric="profit_growth", value=-46.8, unit="percent_yoy",
+                         period="2025", source="FMP", interpretation="falling", healthy=False),
+    ]
+    contradictions = detect_contradictions(financial, [], [])
+    assert len(contradictions) == 1
+    c = contradictions[0]
+    assert c.between == ("financial", "news")
+    assert c.follow_up_target == "news"
+
+
+def test_analyst_no_contradiction_when_expensive_but_growing():
+    # Expensive but GROWING is not a contradiction by this detector.
+    from investpanel.models.findings import FinancialFinding
+
+    financial = [
+        FinancialFinding(metric="pe_ratio", value=35.0, unit="ratio", period="TTM",
+                         source="FMP", interpretation="pricey", healthy=False),
+        FinancialFinding(metric="profit_growth", value=19.0, unit="percent_yoy",
+                         period="2025", source="FMP", interpretation="growing", healthy=True),
+    ]
+    assert detect_contradictions(financial, [], []) == []
+
 
 def test_news_agent_only_keeps_fetchable_dated_articles(monkeypatch):
     from investpanel.tools import fetch, search
