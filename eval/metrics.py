@@ -129,6 +129,41 @@ class EvalSummary:
         }
 
 
+def build_question_result(
+    *,
+    question_id: str,
+    question_text: str,
+    reasonable_read: str,
+    had_known_contradiction: bool,
+    conclusion: str,
+    flagged_contradiction: bool,
+    firm_conclusion: bool,
+    judge: Judge,
+    cost_usd: float = 0.0,
+    latency_seconds: float = 0.0,
+) -> QuestionResult:
+    """Score one system answer into a QuestionResult, using the judge.
+
+    Shared by the baseline and (later) the panel so both are scored identically.
+    We operationalize "contradicts the reasonable read" as the judge rating the
+    reasoning at its lowest level (rubric score 1 -> quality 0.0), which the rubric
+    itself defines as "contradicts the known context, or overconfident and wrong."
+    Being firm AND rated that low is what "confidently wrong" then captures.
+    """
+    quality = score_reasoning(question_text, conclusion, reasonable_read, judge)
+    contradicts = quality == 0.0
+    return QuestionResult(
+        question_id=question_id,
+        reasoning_quality=quality,
+        had_known_contradiction=had_known_contradiction,
+        caught_contradiction=flagged_contradiction,
+        gave_firm_conclusion=firm_conclusion,
+        contradicts_reasonable_read=contradicts,
+        cost_usd=cost_usd,
+        latency_seconds=latency_seconds,
+    )
+
+
 def summarize(system_name: str, results: list[QuestionResult]) -> EvalSummary:
     """Combine per-question results into one summary. Fixture-testable by design."""
     if not results:

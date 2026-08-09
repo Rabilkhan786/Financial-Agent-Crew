@@ -8,6 +8,7 @@ function, satisfying the rule that no test makes a real API call.
 from eval.metrics import (
     QuestionResult,
     _parse_score,
+    build_question_result,
     make_llm_judge,
     score_reasoning,
     summarize,
@@ -93,6 +94,42 @@ def test_summarize_computes_known_aggregates():
     assert round(summary.mean_cost_usd, 6) == 0.03
     # Mean latency: (10 + 20 + 30 + 0) / 4 = 15.0
     assert summary.mean_latency_seconds == 15.0
+
+
+def test_build_question_result_marks_lowest_score_as_contradicting_read():
+    # Judge rates the reasoning at the floor (1) -> quality 0.0 -> contradicts read.
+    poor_judge = lambda q, a, r: 1
+    result = build_question_result(
+        question_id="q1",
+        question_text="Is X good?",
+        reasonable_read="X is fine.",
+        had_known_contradiction=False,
+        conclusion="X is a screaming buy, no risks at all!",
+        flagged_contradiction=False,
+        firm_conclusion=True,
+        judge=poor_judge,
+    )
+    assert result.reasoning_quality == 0.0
+    assert result.contradicts_reasonable_read is True
+    # Firm + contradicts -> this is exactly a "confidently wrong" case.
+    assert result.gave_firm_conclusion is True
+
+
+def test_build_question_result_good_score_does_not_contradict_read():
+    good_judge = lambda q, a, r: 5
+    result = build_question_result(
+        question_id="q2",
+        question_text="Is X good?",
+        reasonable_read="X is fine.",
+        had_known_contradiction=True,
+        conclusion="Balanced, evidence-based view.",
+        flagged_contradiction=True,
+        firm_conclusion=False,
+        judge=good_judge,
+    )
+    assert result.reasoning_quality == 1.0
+    assert result.contradicts_reasonable_read is False
+    assert result.caught_contradiction is True
 
 
 def test_catch_rate_is_none_when_nothing_is_labeled():

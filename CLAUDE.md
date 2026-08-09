@@ -84,7 +84,7 @@ survives between sessions when the user runs `/clear`.
 ```
 Phase 0  Skeleton, LLM factory, tracing, API clients   [~] code complete, GATE 0 pending keys
 Phase 1  Ground-truth question set, metrics            [x] GATE 1 passed (mock-tested, no keys)
-Phase 2  Baseline (single LLM + search)                [ ] not started
+Phase 2  Baseline (single LLM + search)                [~] code+tests done, GATE 2 run pending keys
 Phase 3  Financial + News + Risk agents                [ ] not started
 Phase 4  Manager + Analyst + cross-check loop           [ ] not started
 Phase 5  Full eval, error analysis, ablation            [ ] not started
