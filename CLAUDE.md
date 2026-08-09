@@ -85,7 +85,7 @@ survives between sessions when the user runs `/clear`.
 Phase 0  Skeleton, LLM factory, tracing, API clients   [~] code complete, GATE 0 pending keys
 Phase 1  Ground-truth question set, metrics            [x] GATE 1 passed (mock-tested, no keys)
 Phase 2  Baseline (single LLM + search)                [~] code+tests done, GATE 2 run pending keys
-Phase 3  Financial + News + Risk agents                [ ] not started
+Phase 3  Financial + News + Risk agents                [~] code+tests done, GATE 3 run pending keys
 Phase 4  Manager + Analyst + cross-check loop           [ ] not started
 Phase 5  Full eval, error analysis, ablation            [ ] not started
 Phase 6  Streamlit, Docker, deploy, docs                [ ] not started
@@ -101,12 +101,23 @@ judge, contradiction catch rate, confidently-wrong rate, cost/latency). 11 unit 
 companies and sharpen any "reasonable_read" you disagree with, then re-run
 `uv run python -m eval.datasets.heldout_questions` to regenerate the JSON.
 
-**Next action:** Phase 2 baseline. Code (`eval/baselines/single_llm_search.py`) can be
-written now, but GATE 2 (running it over the question set) needs live keys — blocked until
-`.env` is filled. GATE 0 live check also still pending keys.
+**Next action:** Phase 4 — Manager + Analyst + the cross-check loop + LangGraph wiring
+(`graph/`). This is the Opus-worthy core (the analyst cross-check). Build it, then GATE 4
+end-to-end needs keys. Financial/News/Risk agents already exist and are mock-tested.
 
-**Open problems:** Live gates (0 live-check, 2 run, 4 run) blocked on the 4 API keys in
-`.env`. All code + mock tests run without keys. No code known-broken.
+**Phase 3 done (code):** `agents/base.py` (LLM+JSON-retry+trace), `agents/financial.py`
+(metrics computed in pure Python from FMP — never by the LLM — each sourced; peer table),
+`agents/risk.py` (volatility + max drawdown from AV prices, pure Python, no LLM),
+`agents/news.py` (summaries of really-fetched articles; source_url is the fetched URL;
+unfetchable/undated articles skipped), `tools/volatility.py`, FMP statement endpoints,
+AV `closing_prices`. `demo_gate3.py` prints all three specialists for one ticker. 30 tests pass.
+
+**FMP FIELD NOTE:** financial metric extraction guesses some FMP field names (e.g.
+operatingCashFlow, totalStockholdersEquity, peRatioTTM) with fallbacks. Verify against a
+real FMP response at GATE 3 and adjust `_pick(...)` names in `agents/financial.py` if needed.
+
+**Open problems:** Live gates (0 live-check, 2 run, 3 run, 4 run) blocked on the 4 API keys
+in `.env`. All code + mock tests run without keys (30 passing). No code known-broken.
 
 **Decisions made that differ from the spec:** none functional. Notes: (1) the disk-cache +
 retry logic for all three clients lives in one file `tools/cache.py` so the caching rule is

@@ -50,3 +50,19 @@ CACHE_TTL_SECONDS = 60 * 60 * 24 * 7  # cache every response for one week
 # Hard rule: the analyst may loop back to a specialist at most twice. This bound
 # lives here so it is impossible to accidentally change it inside the agent code.
 MAX_FOLLOWUP_ROUNDS = 2
+
+# --- Financial "healthy range" thresholds ------------------------------------
+# Rough rules of thumb, kept here (not inside the agent) so they're easy to see
+# and adjust. These decide the yes/no "healthy" flag on each FinancialFinding.
+# They are heuristics for a learning project, not precise investing rules.
+HEALTHY_DEBT_TO_EQUITY_MAX = 1.0     # below ~1.0x is generally comfortable
+HEALTHY_INTEREST_COVERAGE_MIN = 3.0  # EBIT covers interest at least ~3x
+HEALTHY_ROCE_MIN = 0.10              # 10%+ return on capital employed
+HEALTHY_ROE_MIN = 0.12              # 12%+ return on equity
+HEALTHY_PE_MAX = 25.0               # above this looks expensive on earnings
+HEALTHY_PB_MAX = 5.0               # above this looks expensive on book value
+HEALTHY_PEG_MAX = 1.5              # valuation reasonable vs growth (PEG-like)
+
+# --- Risk thresholds ---------------------------------------------------------
+# Annualized volatility above this is flagged as "elevated" by the Risk agent.
+HIGH_VOLATILITY_THRESHOLD = 0.40

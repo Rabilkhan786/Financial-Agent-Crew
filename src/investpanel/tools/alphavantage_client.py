@@ -49,3 +49,22 @@ def get_daily_prices(ticker: str) -> dict:
         raise ValueError(f"Alpha Vantage returned no daily series for '{ticker}'.")
     data["source"] = source
     return data
+
+
+def closing_prices(data: dict) -> list[float]:
+    """Pull the daily closing prices out of an Alpha Vantage response.
+
+    Alpha Vantage returns the series as a date -> fields dict, newest first and
+    keyed by strings like "4. close". The Risk agent needs a plain list of closes
+    in chronological (oldest-first) order, which is what this returns.
+    """
+    series = data.get("Time Series (Daily)", {})
+    closes = []
+    # Sorting the date strings ascending puts oldest first (ISO dates sort right).
+    for day in sorted(series.keys()):
+        close = series[day].get("4. close")
+        if close is not None:
+            closes.append(float(close))
+    if len(closes) < 3:
+        raise ValueError("Not enough closing prices to assess risk.")
+    return closes

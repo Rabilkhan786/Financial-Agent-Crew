@@ -40,3 +40,53 @@ def get_company_profile(ticker: str) -> dict:
     profile = data[0]
     profile["source"] = source
     return profile
+
+
+def _get_statement(endpoint: str, ticker: str, limit: int) -> list[dict]:
+    """Shared helper: fetch a financial statement list, newest period first.
+
+    ``endpoint`` is an FMP path like "income-statement". We ask for a few years so
+    the Financial agent can compute year-over-year growth. Returns the raw list;
+    the agent picks the fields it needs and records the source.
+    """
+    key = _require_key()
+    ticker = ticker.upper()
+    url = f"{BASE_URL}/{endpoint}/{ticker}"
+    data = cache.cached_get_json(
+        url,
+        cache_key=f"fmp:{endpoint}:{ticker}:{limit}",
+        params={"apikey": key, "limit": limit, "period": "annual"},
+    )
+    if not data:
+        raise ValueError(f"FMP returned no '{endpoint}' for ticker '{ticker}'.")
+    return data
+
+
+def get_income_statement(ticker: str, limit: int = 2) -> list[dict]:
+    """Annual income statements (revenue, net income, operating income...)."""
+    return _get_statement("income-statement", ticker, limit)
+
+
+def get_balance_sheet(ticker: str, limit: int = 1) -> list[dict]:
+    """Annual balance sheets (debt, equity, assets, current liabilities...)."""
+    return _get_statement("balance-sheet-statement", ticker, limit)
+
+
+def get_cash_flow(ticker: str, limit: int = 1) -> list[dict]:
+    """Annual cash-flow statements (operating cash flow...)."""
+    return _get_statement("cash-flow-statement", ticker, limit)
+
+
+def get_ratios_ttm(ticker: str) -> dict:
+    """Trailing-twelve-month ratios (P/E, P/B...). Returns the single ratios dict."""
+    key = _require_key()
+    ticker = ticker.upper()
+    url = f"{BASE_URL}/ratios-ttm/{ticker}"
+    data = cache.cached_get_json(
+        url,
+        cache_key=f"fmp:ratios-ttm:{ticker}",
+        params={"apikey": key},
+    )
+    if not data:
+        raise ValueError(f"FMP returned no TTM ratios for ticker '{ticker}'.")
+    return data[0]
