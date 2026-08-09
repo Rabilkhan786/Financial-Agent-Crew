@@ -60,21 +60,29 @@ numbers told a consistent story, the analyst correctly reported **0 contradictio
 - **Every number is sourced** — 9 financial metrics per company computed in Python from FMP,
   risk from price history, news from fetched articles.
 
-**Quantitative baseline-vs-panel table — harness is done, numbers pending API budget.**
-`eval/run_eval.py` scores both systems with the same metrics and LLM judge and writes
-`eval/results/comparison.json`. Running it over a meaningful sample needs more calls than a
-**free** LLM tier allows in a day (the demo tier used here is ~50 requests/day, which the
-live testing above exhausts). To produce the table, run it after the daily reset or with a
-small amount of API credit:
+**Quantitative baseline vs panel** (real run, `n = 11` of 34 — a free daily token limit
+stopped the rest; produced by `eval/run_eval.py`, never hand-written):
+
+| System | Reasoning quality (0–1) | Contradiction catch rate | Confidently wrong |
+|---|---|---|---|
+| Single LLM + search | **0.77** | **0.83** (5/6) | 0.00 |
+| InvestPanel | 0.48 | 0.50 (3/6) | 0.00 |
+
+_(Cost ≈ $0 on the free tier; per-question latency wasn't recorded in this run.)_
+
+**Honest finding: in this configuration the single-LLM baseline outscored the multi-agent
+panel.** This project's rule is to report that, not bury it. The most likely cause is a known
+**confound**: the data providers return **current** fundamentals, but the benchmark questions
+and their "reasonable reads" are framed **historically** — so the panel's precise present-day
+report is penalized against a past-dated answer key, while the baseline's web-search answer
+aligns more with the historical framing. Note the panel's core skill *does* work on current
+data (the Tesla contradiction above). A fair comparison needs point-in-time data, which is out
+of scope here. Details and caveats: [`docs/evaluation.md`](docs/evaluation.md). To reproduce or
+run the full 34:
 
 ```bash
-uv run python -m eval.run_eval        # full 34-question comparison
+uv run python -m eval.run_eval
 ```
-
-See [`docs/evaluation.md`](docs/evaluation.md) for metric definitions and honest caveats
-(LLM-judge bias; data is current, so it's a systems comparison, not a point-in-time backtest).
-Per project rule, **no number is written by hand** — the table stays empty until a real run
-fills it.
 
 ---
 

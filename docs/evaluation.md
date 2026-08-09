@@ -55,22 +55,41 @@ Being a **portfolio** project, the eval is honest about its limits:
 3. **Reported numbers are from a representative sample**, not the full 34 (running the full
    set on a free model is slow; the harness supports it — see above).
 
-## Results
+## Results (real run, n = 11 of 34)
 
-The quantitative table is produced by `run_all` and never hand-written (hard rule #2). A full
-sample run needs more LLM calls than a **free** provider tier allows per day (the demo tier
-used here is ~50 requests/day, exhausted by the live gate/demo runs), so the table is left
-empty here until a run with adequate budget fills it:
+Produced by `run_all` on 2026-08-09 with Groq `llama-3.3-70b-versatile`; the free daily token
+limit stopped it after 11 questions. Never hand-written (hard rule #2) — see
+`eval/results/comparison.json`.
 
-| System | Reasoning quality | Contradiction catch rate | Confidently wrong | Cost/question | Latency |
-|---|---|---|---|---|---|
-| Single LLM + search | _pending a budgeted run_ | | | | |
-| InvestPanel | _pending a budgeted run_ | | | | |
+| System | Reasoning quality (0–1) | Contradiction catch rate | Confidently wrong |
+|---|---|---|---|
+| Single LLM + search | 0.77 | 0.83 (5/6) | 0.00 |
+| InvestPanel | 0.48 | 0.50 (3/6) | 0.00 |
 
-What **was** demonstrated live (see the README): the panel catches a real
-valuation-vs-fundamentals contradiction on Tesla and correctly finds none on Apple. The
-headline metric to compare when the table is run is **contradiction catch rate** — the panel's
-reason for existing is catching tensions the single-pass baseline glosses over.
+(Cost ≈ $0 on the free tier; per-question latency not recorded in this run.)
+
+## Error analysis (the honest part)
+
+**In this configuration the baseline beat the panel.** Rule #2 says report and analyse that.
+
+Most likely cause — a **data/label mismatch confound**: FMP/Alpha Vantage return *current*
+fundamentals, but the questions and "reasonable reads" are framed at a *past* date. So:
+
+- The **baseline** does a web search that surfaces the historically-framed context, so its
+  answer lines up better with the past-dated reference read.
+- The **panel** faithfully reports *today's* numbers (e.g. current P/E, latest growth), which
+  the historical answer key marks down — and it correctly finds *no* contradiction on a company
+  whose 2023 tension no longer exists today, yet that scores as a "miss" against the historical
+  label.
+
+Evidence the panel's mechanism itself is sound: the live Tesla run catches a real
+valuation-vs-fundamentals contradiction on current data (README). The `confidently_wrong` rate
+is 0.00 for both because it only triggers on the judge's floor score, which nothing hit.
+
+**What would make the comparison fair (out of scope for this portfolio version):**
+point-in-time fundamentals aligned to each question's date, plus reasonable-reads written
+against that same data. With current-only data, the meaningful comparison is on questions
+framed "as of today", not the historical set.
 
 ## Error analysis and ablation
 

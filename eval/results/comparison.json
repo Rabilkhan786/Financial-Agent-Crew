@@ -1,0 +1,24 @@
+{
+  "baseline": {
+    "system_name": "Single LLM + search",
+    "num_questions": 11,
+    "mean_reasoning_quality": 0.7727,
+    "contradiction_catch_rate": 0.8333,
+    "confidently_wrong_rate": 0.0,
+    "mean_cost_usd": 0.0,
+    "mean_latency_seconds": 0.0,
+    "num_labeled_contradictions": 6,
+    "num_contradictions_caught": 5
+  },
+  "investpanel": {
+    "system_name": "InvestPanel",
+    "num_questions": 11,
+    "mean_reasoning_quality": 0.4773,
+    "contradiction_catch_rate": 0.5,
+    "confidently_wrong_rate": 0.0,
+    "mean_cost_usd": 0.0,
+    "mean_latency_seconds": 0.0,
+    "num_labeled_contradictions": 6,
+    "num_contradictions_caught": 3
+  }
+}
