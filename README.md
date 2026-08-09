@@ -5,7 +5,7 @@ A multi-agent investment research panel: a manager dispatches **financial**,
 whether their findings actually agree** before writing a report — catching
 contradictions a single-pass analysis would miss.
 
-> ⚠️ **This is informational analysis only, not investment advice.** It is not a
+>  **This is informational analysis only, not investment advice.** It is not a
 > recommendation to buy, sell, or hold any security. Consult a licensed financial
 > advisor before making investment decisions.
 

@@ -34,14 +34,19 @@ def report_to_answer(report: Report) -> tuple[str, bool, bool]:
     return conclusion, flagged, firm
 
 
-def run_all(out_path: Path | None = None):
-    """Score both systems over the full question set and write the comparison."""
+def run_all(out_path: Path | None = None, questions=None):
+    """Score both systems over the question set and write the comparison.
+
+    ``questions`` defaults to the full held-out set; pass a subset (e.g. for a
+    quick representative run) to score just those.
+    """
     from eval.baselines.single_llm_search import run_baseline
     from eval.datasets.heldout_questions import QUESTIONS
     from eval.metrics import build_question_result, make_llm_judge, summarize
     from investpanel.graph.workflow import run_panel
     from investpanel.llm.factory import get_llm
 
+    questions = questions if questions is not None else QUESTIONS
     out_path = out_path or (config.PROJECT_ROOT / "eval" / "results" / "comparison.json")
     judge = make_llm_judge(get_llm())
 
@@ -59,13 +64,20 @@ def run_all(out_path: Path | None = None):
 
     baseline_results = []
     panel_results = []
-    for q in QUESTIONS:
-        ans = run_baseline(q)
-        baseline_results.append(result_from(q, ans.conclusion, ans.flagged_contradiction, ans.firm_conclusion))
-        report = run_panel(q.question)
-        conclusion, flagged, firm = report_to_answer(report)
-        panel_results.append(result_from(q, conclusion, flagged, firm))
-        print(f"  scored {q.id}")
+    for q in questions:
+        # One question failing (e.g. a transient free-tier rate limit) must not
+        # abandon the whole eval — skip it and keep going.
+        try:
+            ans = run_baseline(q)
+            baseline_results.append(
+                result_from(q, ans.conclusion, ans.flagged_contradiction, ans.firm_conclusion)
+            )
+            report = run_panel(q.question)
+            conclusion, flagged, firm = report_to_answer(report)
+            panel_results.append(result_from(q, conclusion, flagged, firm))
+            print(f"  scored {q.id}")
+        except Exception as error:  # noqa: BLE001 - skip a failed question, keep the eval going
+            print(f"  SKIPPED {q.id}: {error}")
 
     baseline_summary = summarize("Single LLM + search", baseline_results)
     panel_summary = summarize("InvestPanel", panel_results)
