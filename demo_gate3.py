@@ -15,6 +15,11 @@ from investpanel.agents.financial import FinancialAgent
 from investpanel.agents.news import NewsAgent
 from investpanel.agents.risk import RiskAgent
 
+# Windows consoles default to a codepage that can't print some article characters;
+# force UTF-8 output so a fancy dash in a headline never crashes the demo.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 
 def main() -> None:
     ticker = sys.argv[1] if len(sys.argv) > 1 else "AAPL"

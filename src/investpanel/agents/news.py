@@ -9,6 +9,7 @@ can't fetch, or that lack a usable date, are skipped rather than guessed.
 """
 
 from datetime import date
+from email.utils import parsedate_to_datetime
 
 from investpanel.agents.base import BaseAgent
 from investpanel.models.findings import NewsFinding
@@ -57,11 +58,15 @@ class NewsAgent(BaseAgent):
         url = result.get("url")
         if not url:
             return None
-        try:
-            text = fetch.fetch_article_text(url)
-        except Exception:  # noqa: BLE001 - intentional: skip any article we can't fetch, for any reason
-            # Couldn't fetch/extract -> we have no real source, so we skip it.
-            return None
+        # Prefer the article text the search tool already fetched (fast and
+        # avoids re-downloading redirect URLs). Fall back to fetching it ourselves.
+        text = result.get("raw_content") or result.get("content")
+        if not text:
+            try:
+                text = fetch.fetch_article_text(url)
+            except Exception:  # noqa: BLE001 - intentional: skip any article we can't fetch, for any reason
+                # Couldn't fetch/extract -> we have no real source, so we skip it.
+                return None
 
         prompt = SUMMARY_PROMPT.format(
             company=company,
@@ -90,13 +95,21 @@ class NewsAgent(BaseAgent):
 
     @staticmethod
     def _resolve_date(from_search, from_model) -> date | None:
-        """Prefer the search result's date, then a date the article itself stated."""
+        """Prefer the search result's date, then a date the article itself stated.
+
+        Handles both ISO ("2025-01-31") and the RFC-2822 form Tavily returns
+        ("Thu, 02 Apr 2026 00:00:00 GMT").
+        """
         for candidate in (from_search, from_model):
             if not candidate:
                 continue
+            text = str(candidate).strip()
             try:
-                # Handle both "YYYY-MM-DD" and longer ISO timestamps.
-                return date.fromisoformat(str(candidate)[:10])
+                return date.fromisoformat(text[:10])  # ISO form
             except ValueError:
+                pass
+            try:
+                return parsedate_to_datetime(text).date()  # RFC-2822 form
+            except (TypeError, ValueError):
                 continue
         return None

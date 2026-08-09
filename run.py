@@ -13,6 +13,11 @@ import sys
 from investpanel.graph.workflow import run_panel
 from investpanel.models.report import Report
 
+# Force UTF-8 console output so special characters in headlines/summaries don't
+# crash printing on Windows.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 
 def print_report(report: Report) -> None:
     print(f"\n{'=' * 70}\n  {report.company}\n{'=' * 70}\n")
