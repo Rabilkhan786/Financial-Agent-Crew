@@ -182,7 +182,10 @@ def run_panel(question: str):
     """
     import time
 
-    from investpanel.utils.tracing import save_trace
+    from investpanel.utils.tracing import init_langsmith, save_trace
+
+    # Send the whole multi-agent run to LangSmith too, if a key is configured.
+    init_langsmith()
 
     workflow = build_workflow(build_panel())
     # Each round adds ~2 steps (specialist + analyst); give clear headroom.

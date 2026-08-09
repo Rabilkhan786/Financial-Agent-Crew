@@ -87,8 +87,8 @@ Phase 1  Ground-truth question set, metrics            [x] GATE 1 passed (mock-t
 Phase 2  Baseline (single LLM + search)                [~] code+tests done, GATE 2 run pending keys
 Phase 3  Financial + News + Risk agents                [x] GATE 3 verified live (AAPL: Financial+Risk+News all sourced)
 Phase 4  Manager + Analyst + cross-check loop           [x] GATE 4 passed live (TSLA: caught P/E-vs-shrinking-profit, looped to News, 2 rounds)
-Phase 5  Full eval, error analysis, ablation            [~] harness (run_eval.py) done; numbers pending keys
-Phase 6  Streamlit, Docker, deploy, docs                [~] app+docker+docs+README done; deploy+numbers pending keys
+Phase 5  Full eval, error analysis, ablation            [~] PORTFOLIO scope: sample eval (not full 34); harness done, sample run in progress
+Phase 6  Streamlit, Docker, deploy, docs                [~] PORTFOLIO scope: app+docs+README done as portfolio; deploy/CI intentionally OUT OF SCOPE
 ```
 
 **Last completed:** Phase 1 — `eval/datasets/heldout_questions.py` (34 hand-built, date-
@@ -108,12 +108,16 @@ OpenRouter is now paid-only; other free models exist (also verified: `openai/gpt
 so the full 34x2 eval will be long — consider `gpt-oss-20b:free` as a faster workhorse, or run
 the eval on a subset first. Factory supports gemini|openai|anthropic|groq|deepseek|openrouter.
 
-**Next action:** GATE 4 — a full `run.py` end-to-end was launched for Apple (verify report +
-disclaimer + any contradiction). To DEMONSTRATE the cross-check loop live, pick a value-trap-ish
-name (cheap P/E + a weak fundamental + elevated vol) so detector 3 fires, or rely on LLM
-augmentation. Then GATE 2 (`python -m eval.baselines.single_llm_search`) and the full eval
-(`python -m eval.run_eval`) -> paste REAL numbers into README + docs/evaluation.md -> Phase 5
-error analysis + ablation -> deploy + screenshot. Do NOT fabricate any number (hard rule #2).
+**DIRECTION: PORTFOLIO, not production** (user decision 2026-08-09). Selected scope: reframe
+README+docs as a portfolio piece (DONE), run a SMALL representative eval for real numbers (in
+progress), and SKIP deploy / CI / the full 34-question eval / screenshot. Gates 0,1,3,4 all
+PASS live. LLM runs on OpenRouter free model `openai/gpt-oss-20b:free`.
+
+**Next action:** when the sample eval (`_sample_eval_runner.py` -> `eval/results/comparison_sample.json`)
+finishes, paste the REAL numbers into README + docs/evaluation.md results tables, then delete
+`_sample_eval_runner.py`. Do NOT fabricate any number (hard rule #2). Remaining optional
+housekeeping: push to a GitHub remote, rotate the FMP/AV/Tavily/LangSmith keys (were briefly in
+a tracked file). Everything else is done.
 
 **SECURITY (resolved):** the user twice pasted real keys into `.env.example` (a tracked file);
 one paste (FMP/AV/Tavily/LangSmith) got committed in the old Phase 6 commit. History was

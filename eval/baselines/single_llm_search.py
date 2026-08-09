@@ -78,9 +78,14 @@ def run_baseline(question, llm=None, searcher=None) -> BaselineAnswer:
     """Answer one HeldoutQuestion with the single-LLM-plus-search baseline.
 
     ``question`` is a HeldoutQuestion. ``llm`` and ``searcher`` default to the
-    real Gemini model and Tavily search, but tests pass fakes instead.
+    configured LLM provider and Tavily search, but tests pass fakes instead.
     """
-    llm = llm or get_llm()
+    if llm is None:
+        # Real run (not a test): send this to LangSmith too, if configured.
+        from investpanel.utils.tracing import init_langsmith
+
+        init_langsmith()
+        llm = get_llm()
     searcher = searcher or search.search_news
 
     start = time.perf_counter()

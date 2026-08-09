@@ -1,36 +1,78 @@
 # InvestPanel
 
-A multi-agent investment research panel: a manager dispatches **financial**,
-**news**, and **risk** specialists in parallel, and an **analyst agent checks
-whether their findings actually agree** before writing a report — catching
-contradictions a single-pass analysis would miss.
+> **Portfolio project.** A multi-agent investment-research system built to explore one
+> idea end to end: *can a team of specialist agents plus an "analyst" that cross-checks
+> their findings catch contradictions a single LLM pass would miss?* It's a learning /
+> demonstration project, not a production service — see [Scope](#scope--what-this-is-and-isnt).
 
->  **This is informational analysis only, not investment advice.** It is not a
-> recommendation to buy, sell, or hold any security. Consult a licensed financial
-> advisor before making investment decisions.
+A **manager** dispatches **financial**, **news**, and **risk** specialists in parallel, then
+an **analyst agent checks whether their findings actually agree** before writing a report —
+and loops back with a specific follow-up when the numbers and the narrative disagree.
 
-_Live demo: not yet deployed. Screenshot/GIF: added after the first live run._
+> ⚠️ **Informational analysis only — not investment advice.** Not a recommendation to buy,
+> sell, or hold any security. Consult a licensed financial advisor before investing.
 
-## Results
+---
 
-Both systems are scored on the same 34-question benchmark with the same metrics.
-The table is produced by `uv run python -m eval.run_eval` — the numbers below are
-intentionally left blank until a real run fills them in (this project never
-hand-writes a result number).
+## What this project demonstrates
+
+- **Multi-agent design with a real purpose** — not "agents for the sake of agents." The
+  analyst's cross-check is the reason the system exists, and it's built as explicit,
+  testable logic, not a vague prompt.
+- **Evaluation-first engineering** — the metrics harness and a single-LLM baseline were
+  built *before* the agents, so "does the extra machinery help?" is measured, not assumed.
+- **Typed contracts everywhere** — every agent boundary is a Pydantic model; rules like
+  "no unsourced facts" and "the disclaimer can't be removed" are enforced in code and tested.
+- **Honest, reproducible results** — every number comes from a re-runnable script; none are
+  hand-written.
+- **Pragmatic API integration** — direct HTTP (no MCP, no vendor SDKs), disk-cached, with a
+  swappable LLM factory (Gemini / OpenAI / Anthropic / Groq / DeepSeek / OpenRouter).
+
+---
+
+## The centerpiece: the analyst catching a real contradiction
+
+A live run on **Tesla** (real data, free model). The financial agent found revenue **−2.9%**
+and profit **−46.8%**, yet a **P/E of 278** — and the analyst caught the tension a single
+summary would gloss over:
+
+```
+Contradictions found: 1 (follow-ups run: 2)
+  financial vs news: Valuation is rich (P/E 278) but the fundamentals are shrinking
+  (revenue/profit declining) — the price implies growth the numbers don't show.
+      → asked news: "What justifies the premium valuation despite declining revenue/profit?"
+```
+
+The follow-up made the News agent go find the forward-looking story (AI / autonomy / energy)
+that the market is pricing in — the loop working exactly as intended. On **Apple**, whose
+numbers told a consistent story, the analyst correctly reported **0 contradictions**.
+
+---
+
+## Results (representative sample)
+
+Baseline vs InvestPanel on a sample of the held-out questions, scored by the same metrics
+and LLM judge. Produced by `eval/run_eval.py` — see [`docs/evaluation.md`](docs/evaluation.md)
+for definitions and the honest caveats (LLM-judge bias; data is current, so this is a systems
+comparison, not a point-in-time backtest).
 
 | System | Reasoning quality | Contradiction catch rate | Confidently wrong | Cost/question | Latency |
 |---|---|---|---|---|---|
-| Single LLM + search | _pending run_ | _pending run_ | _pending run_ | _pending run_ | _pending run_ |
-| InvestPanel | _pending run_ | _pending run_ | _pending run_ | _pending run_ | _pending run_ |
+| Single LLM + search | _sample run in progress_ | | | | |
+| InvestPanel | _sample run in progress_ | | | | |
+
+_(Numbers filled from the actual sample run; a full 34-question run is out of scope for this
+portfolio version — the harness supports it via `uv run python -m eval.run_eval`.)_
+
+---
 
 ## Why not just one AI?
 
-A single LLM pass usually reviews each source separately and writes a fluent
-summary without noticing when the numbers and the narrative disagree. InvestPanel
-splits research from *checking*: an analyst agent compares specific claims across
-the specialists and, on a mismatch, sends one pointed follow-up back to one
-specialist. Whether that actually beats a single-LLM baseline is measured, not
-assumed — see [`docs/evaluation.md`](docs/evaluation.md).
+A single LLM pass usually reviews each source separately and writes a fluent summary without
+noticing when the numbers and the narrative disagree. InvestPanel splits research from
+*checking*: the analyst compares specific claims across the specialists and, on a mismatch,
+sends one pointed follow-up to one specialist. Whether that beats a single-LLM baseline is
+measured, not assumed.
 
 ## Architecture
 
@@ -44,52 +86,71 @@ question -> [Manager] -> [Financial] [News] [Risk] (parallel) -> [Analyst]
 ```
 
 - **Manager** — reads the question, sets scope, finds real competitors via search.
-- **Financial** — fundamentals from FMP; numbers computed in Python, each sourced.
-- **News** — searches Tavily, fetches real articles, summarizes them with sources.
-- **Risk** — volatility and drawdown computed in pure Python from price history.
-- **Analyst** — cross-checks the three; loops back on a real contradiction; writes the report.
+- **Financial** — fundamentals from FMP; every number computed in Python (never by the LLM), each sourced.
+- **News** — searches Tavily and summarizes real articles, each with its source URL.
+- **Risk** — volatility and max drawdown computed in pure Python from price history (no separate API).
+- **Analyst** — cross-checks the three, loops back on a real contradiction, writes the report.
 
-More detail in [`docs/architecture.md`](docs/architecture.md) and
-[`docs/agent_contracts.md`](docs/agent_contracts.md).
+Details: [`docs/architecture.md`](docs/architecture.md) ·
+[`docs/agent_contracts.md`](docs/agent_contracts.md) ·
+[`docs/interview_notes.md`](docs/interview_notes.md).
 
 ## Quickstart
 
-Requires [uv](https://docs.astral.sh/uv/). Then:
+Requires [uv](https://docs.astral.sh/uv/).
 
 ```bash
 uv sync
-cp .env.example .env      # then paste your four keys into .env
+cp .env.example .env      # then add your keys to .env
 ```
 
-Four free API keys go in `.env`:
+You need **one LLM provider key** plus the three data keys. The LLM is swappable — set
+`LLM_PROVIDER` in `.env` to `gemini` | `openai` | `anthropic` | `groq` | `deepseek` |
+`openrouter`. A free option: an [OpenRouter](https://openrouter.ai/keys) key with a free
+model (this project was demoed on one).
 
-| Variable | Get it from |
+| Variable | For |
 |---|---|
-| `GEMINI_API_KEY` | https://aistudio.google.com/app/apikey |
-| `FMP_API_KEY` | https://site.financialmodelingprep.com/developer/docs |
-| `ALPHAVANTAGE_API_KEY` | https://www.alphavantage.co/support/#api-key |
-| `TAVILY_API_KEY` | https://app.tavily.com/ |
-
-Then:
+| `LLM_PROVIDER` + that provider's key | the LLM (e.g. `OPENROUTER_API_KEY`) |
+| `FMP_API_KEY` | fundamentals — [FMP](https://site.financialmodelingprep.com/developer/docs) |
+| `ALPHAVANTAGE_API_KEY` | price history — [Alpha Vantage](https://www.alphavantage.co/support/#api-key) |
+| `TAVILY_API_KEY` | news search — [Tavily](https://app.tavily.com/) |
 
 ```bash
-uv run python check_gate0.py                 # verify all four APIs are reachable
-uv run python run.py "Is Apple a reasonable long-term investment?"
-uv run streamlit run app.py                  # the interactive demo
-uv run pytest -q                             # tests (all mocked, no API calls)
+uv run python check_gate0.py                 # verify all APIs are reachable
+uv run python run.py "Is Tesla a reasonable long-term investment?"
+uv run streamlit run app.py                  # the interactive demo (research + observability tabs)
+uv run pytest -q                             # 42 tests, all mocked (no API calls)
 ```
+
+## Scope — what this is and isn't
+
+**Is:** a portfolio project showcasing multi-agent design, an evaluation harness, typed
+contracts, and honest measurement. It runs, it's tested, and its core claim is demonstrated
+on live data.
+
+**Isn't:** a production service. Deliberately out of scope: live deployment, CI/CD,
+authentication, request scaling/queuing, point-in-time historical data, and broad market
+coverage. See below for what production would need.
+
+### What production would need (deliberately not built)
+- Point-in-time data (the current providers return latest fundamentals, so the eval is a
+  systems comparison, not a rigorous backtest).
+- A larger, second-reviewed question set and human-validated labels.
+- Real token-cost accounting, rate-limit handling/backoff, and observability at scale.
+- Auth, deployment, and CI/CD.
 
 ## Limitations
 
 - Reasoning quality is scored by an LLM judge, which has its own biases.
-- Coverage is limited to large, well-documented public companies where the data
-  providers are reliable.
-- **This is not predictive of future prices and must never be read as such.**
+- Coverage is limited to large, well-documented companies where the data is reliable.
+- **Not predictive of future prices — never read it as such.**
 
-## What I learned / what's next
+## What I learned
 
-Building the evaluation harness *before* the agents forced an honest question —
-does the extra machinery actually help? — instead of assuming it. Next: wire real
-token-cost tracking into every run, run the model-independence ablation on the
-analyst, grow and second-review the question set, and add cross-check detectors
-from observed misses. See [`docs/interview_notes.md`](docs/interview_notes.md).
+Building the eval harness *before* the agents forced the honest question — does the extra
+machinery actually help? Running it on live data also surfaced real bugs worth fixing (FMP's
+retired v3 API, a date-parsing gap that dropped all news, and a competitor failure that wiped
+the target's financials) and a genuine gap in the cross-check (it under-caught the
+"expensive-but-shrinking" contradiction until a detector was added — found via the Tesla run).
+That loop — build, measure on reality, fix — is the point.

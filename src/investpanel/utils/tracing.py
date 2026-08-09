@@ -18,6 +18,9 @@ from investpanel.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
+# So init_langsmith can be called from every entry point but only acts once.
+_langsmith_ready = False
+
 
 def init_langsmith() -> bool:
     """Turn on LangSmith tracing if a key is present. Returns True if enabled.
@@ -25,7 +28,11 @@ def init_langsmith() -> bool:
     LangChain/LangGraph read these environment variables automatically, so all we
     have to do is set them. If there is no key we do nothing and return False —
     the run continues exactly the same, just without the LangSmith dashboard.
+    Safe to call repeatedly: it only sets things up once.
     """
+    global _langsmith_ready
+    if _langsmith_ready:
+        return True
     if not config.LANGSMITH_API_KEY:
         logger.info("LangSmith key not set — using local JSON traces only.")
         return False
@@ -34,6 +41,7 @@ def init_langsmith() -> bool:
     os.environ["LANGCHAIN_TRACING_V2"] = "true"
     os.environ["LANGCHAIN_API_KEY"] = config.LANGSMITH_API_KEY
     os.environ["LANGCHAIN_PROJECT"] = config.LANGSMITH_PROJECT
+    _langsmith_ready = True
     logger.info("LangSmith tracing enabled for project '%s'.", config.LANGSMITH_PROJECT)
     return True
 
