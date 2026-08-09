@@ -87,7 +87,7 @@ Phase 1  Ground-truth question set, metrics            [x] GATE 1 passed (mock-t
 Phase 2  Baseline (single LLM + search)                [~] code+tests done, GATE 2 run pending keys
 Phase 3  Financial + News + Risk agents                [x] GATE 3 verified live (AAPL: Financial+Risk+News all sourced)
 Phase 4  Manager + Analyst + cross-check loop           [x] GATE 4 passed live (TSLA: caught P/E-vs-shrinking-profit, looped to News, 2 rounds)
-Phase 5  Full eval, error analysis, ablation            [~] PORTFOLIO scope: sample eval (not full 34); harness done, sample run in progress
+Phase 5  Full eval, error analysis, ablation            [x] REAL numbers (n=11): baseline 0.77/0.83 > panel 0.48/0.50; honest analysis written (data/label confound)
 Phase 6  Streamlit, Docker, deploy, docs                [~] PORTFOLIO scope: app+docs+README done as portfolio; deploy/CI intentionally OUT OF SCOPE
 ```
 
