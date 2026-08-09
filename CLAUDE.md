@@ -86,7 +86,7 @@ Phase 0  Skeleton, LLM factory, tracing, API clients   [~] code complete, GATE 0
 Phase 1  Ground-truth question set, metrics            [x] GATE 1 passed (mock-tested, no keys)
 Phase 2  Baseline (single LLM + search)                [~] code+tests done, GATE 2 run pending keys
 Phase 3  Financial + News + Risk agents                [~] code+tests done, GATE 3 run pending keys
-Phase 4  Manager + Analyst + cross-check loop           [ ] not started
+Phase 4  Manager + Analyst + cross-check loop           [~] code+tests done, GATE 4 run pending keys
 Phase 5  Full eval, error analysis, ablation            [ ] not started
 Phase 6  Streamlit, Docker, deploy, docs                [ ] not started
 ```
@@ -101,9 +101,19 @@ judge, contradiction catch rate, confidently-wrong rate, cost/latency). 11 unit 
 companies and sharpen any "reasonable_read" you disagree with, then re-run
 `uv run python -m eval.datasets.heldout_questions` to regenerate the JSON.
 
-**Next action:** Phase 4 — Manager + Analyst + the cross-check loop + LangGraph wiring
-(`graph/`). This is the Opus-worthy core (the analyst cross-check). Build it, then GATE 4
-end-to-end needs keys. Financial/News/Risk agents already exist and are mock-tested.
+**Next action:** Phase 5 — full eval run (baseline vs panel), error analysis, one measured
+improvement, one ablation. All of Phase 5's *running* needs live keys. `eval/run_eval.py`
+(compare baseline vs panel over the set) can be written now. Then Phase 6 (Streamlit, Docker,
+docs, deploy). Live gates 0/2/3/4 still need `.env` keys.
+
+**Phase 4 done (code):** `agents/manager.py` (parses question, finds competitors via real
+search, company description from FMP profile), `agents/analyst.py` — the core cross-check as
+explicit field-level detectors (unit-tested: catches healthy-financials-vs-unexplained-
+volatility and routes a specific follow-up) plus optional LLM augmentation, `build_checklist_
+answers`, `write_report`; `graph/state.py` (reducers for errors/all_contradictions),
+`graph/routing.py` (bounded loop), `graph/workflow.py` (manager -> 3 parallel specialists ->
+analyst -> follow-up loop -> report, agents injected for testability), `run.py` CLI. 34 tests
+pass incl. loop-fires / loop-stops-at-2-rounds / graceful-degradation.
 
 **Phase 3 done (code):** `agents/base.py` (LLM+JSON-retry+trace), `agents/financial.py`
 (metrics computed in pure Python from FMP — never by the LLM — each sourced; peer table),
