@@ -37,7 +37,7 @@ LANGSMITH_PROJECT = os.getenv("LANGSMITH_PROJECT", "investpanel")
 # --- LLM settings ------------------------------------------------------------
 # Which provider the factory hands out by default. Change LLM_PROVIDER in .env to
 # switch every agent at once — no code change needed. Supported values:
-#   "gemini" (Google) · "openai" (ChatGPT) · "anthropic" (Claude) · "groq"
+#   "gemini" (Google) · "openai" (ChatGPT) · "anthropic" (Claude) · "groq" · "deepseek"
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "gemini")
 LLM_TEMPERATURE = 0.0  # deterministic-ish: we want analysis, not creative writing
 
@@ -53,6 +53,13 @@ ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-3-5-haiku-latest")
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+
+# DeepSeek uses an OpenAI-compatible API, so we reuse the OpenAI client pointed at
+# DeepSeek's base URL. deepseek-chat is the general model; deepseek-reasoner (R1)
+# is stronger at reasoning if you want it for the analyst.
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
+DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
 
 # --- External call behaviour -------------------------------------------------
 HTTP_TIMEOUT_SECONDS = 30

@@ -2,10 +2,11 @@
 
 Every agent asks this factory for its model instead of building one itself, so
 switching provider is a single change (set ``LLM_PROVIDER`` in .env) that applies
-to the whole system at once. Four providers are wired up: "gemini" (Google),
-"openai" (ChatGPT), "anthropic" (Claude), and "groq". You pick whichever you like;
-adding another is just one more small branch below — that is the whole point of
-keeping this in one place.
+to the whole system at once. Five providers are wired up: "gemini" (Google),
+"openai" (ChatGPT), "anthropic" (Claude), "groq", and "deepseek". You pick
+whichever you like; adding another is just one more small branch below — that is
+the whole point of keeping this in one place. (DeepSeek's API is OpenAI-compatible,
+so it reuses the OpenAI client pointed at DeepSeek's base URL — no extra library.)
 
 To run the Phase 5 ablation — giving the Analyst a different provider than the
 specialists — call e.g. ``get_llm(provider="anthropic")`` for that one agent.
@@ -74,8 +75,21 @@ def get_llm(
             temperature=temperature,
         )
 
+    if provider == "deepseek":
+        if not config.DEEPSEEK_API_KEY:
+            raise RuntimeError("DEEPSEEK_API_KEY is not set. Add it to your .env file.")
+        # DeepSeek is OpenAI-compatible: same client, different base_url.
+        from langchain_openai import ChatOpenAI
+
+        return ChatOpenAI(
+            model=model or config.DEEPSEEK_MODEL,
+            api_key=config.DEEPSEEK_API_KEY,
+            base_url=config.DEEPSEEK_BASE_URL,
+            temperature=temperature,
+        )
+
     raise ValueError(
         f"Unknown LLM provider '{provider}'. "
-        "Supported: 'gemini', 'openai', 'anthropic', 'groq'. "
+        "Supported: 'gemini', 'openai', 'anthropic', 'groq', 'deepseek'. "
         "Add a branch for a new one in llm/factory.py."
     )
