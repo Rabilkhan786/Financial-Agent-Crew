@@ -87,7 +87,7 @@ Phase 1  Ground-truth question set, metrics            [x] GATE 1 passed (mock-t
 Phase 2  Baseline (single LLM + search)                [~] code+tests done, GATE 2 run pending keys
 Phase 3  Financial + News + Risk agents                [~] code+tests done, GATE 3 run pending keys
 Phase 4  Manager + Analyst + cross-check loop           [~] code+tests done, GATE 4 run pending keys
-Phase 5  Full eval, error analysis, ablation            [ ] not started
+Phase 5  Full eval, error analysis, ablation            [~] harness (run_eval.py) done; numbers pending keys
 Phase 6  Streamlit, Docker, deploy, docs                [ ] not started
 ```
 
@@ -101,10 +101,14 @@ judge, contradiction catch rate, confidently-wrong rate, cost/latency). 11 unit 
 companies and sharpen any "reasonable_read" you disagree with, then re-run
 `uv run python -m eval.datasets.heldout_questions` to regenerate the JSON.
 
-**Next action:** Phase 5 — full eval run (baseline vs panel), error analysis, one measured
-improvement, one ablation. All of Phase 5's *running* needs live keys. `eval/run_eval.py`
-(compare baseline vs panel over the set) can be written now. Then Phase 6 (Streamlit, Docker,
-docs, deploy). Live gates 0/2/3/4 still need `.env` keys.
+**Next action (BLOCKED ON KEYS):** everything remaining needs the 4 API keys in `.env`.
+Once added, run in order: `check_gate0.py` (GATE 0) -> `python -m eval.baselines.single_llm_search`
+(GATE 2) -> `demo_gate3.py AAPL` (GATE 3, verify/adjust FMP field names) -> `run.py "..."` on
+5 companies incl. one with a contradiction (GATE 4) -> `python -m eval.run_eval` (Phase 5
+numbers). Then Phase 5 error analysis + ablation, then Phase 6 (app.py Streamlit + obs tab +
+report export, Dockerfile, docs, deploy, README results table with REAL numbers only).
+`eval/run_eval.py` harness is written and unit-tested (adapter logic). Do NOT fabricate any
+README number — hard rule #2.
 
 **Phase 4 done (code):** `agents/manager.py` (parses question, finds competitors via real
 search, company description from FMP profile), `agents/analyst.py` — the core cross-check as
