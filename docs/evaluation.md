@@ -55,19 +55,22 @@ Being a **portfolio** project, the eval is honest about its limits:
 3. **Reported numbers are from a representative sample**, not the full 34 (running the full
    set on a free model is slow; the harness supports it — see above).
 
-## Results (representative sample)
+## Results
 
-Populated from an actual run of `run_all` on a sample of the question set (never
-hand-written — project hard rule #2). See `eval/results/comparison_sample.json`.
+The quantitative table is produced by `run_all` and never hand-written (hard rule #2). A full
+sample run needs more LLM calls than a **free** provider tier allows per day (the demo tier
+used here is ~50 requests/day, exhausted by the live gate/demo runs), so the table is left
+empty here until a run with adequate budget fills it:
 
 | System | Reasoning quality | Contradiction catch rate | Confidently wrong | Cost/question | Latency |
 |---|---|---|---|---|---|
-| Single LLM + search | _filled from sample run_ | | | | |
-| InvestPanel | _filled from sample run_ | | | | |
+| Single LLM + search | _pending a budgeted run_ | | | | |
+| InvestPanel | _pending a budgeted run_ | | | | |
 
-The headline comparison to look at is **contradiction catch rate**: the panel's reason for
-existing is catching tensions the single-pass baseline glosses over (demonstrated live on
-Tesla — see the README).
+What **was** demonstrated live (see the README): the panel catches a real
+valuation-vs-fundamentals contradiction on Tesla and correctly finds none on Apple. The
+headline metric to compare when the table is run is **contradiction catch rate** — the panel's
+reason for existing is catching tensions the single-pass baseline glosses over.
 
 ## Error analysis and ablation
 

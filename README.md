@@ -49,20 +49,32 @@ numbers told a consistent story, the analyst correctly reported **0 contradictio
 
 ---
 
-## Results (representative sample)
+## Results
 
-Baseline vs InvestPanel on a sample of the held-out questions, scored by the same metrics
-and LLM judge. Produced by `eval/run_eval.py` — see [`docs/evaluation.md`](docs/evaluation.md)
-for definitions and the honest caveats (LLM-judge bias; data is current, so this is a systems
-comparison, not a point-in-time backtest).
+**Demonstrated qualitatively on live data** (the honest, reproducible part with a free API tier):
 
-| System | Reasoning quality | Contradiction catch rate | Confidently wrong | Cost/question | Latency |
-|---|---|---|---|---|---|
-| Single LLM + search | _sample run in progress_ | | | | |
-| InvestPanel | _sample run in progress_ | | | | |
+- **Analyst catches a real contradiction** — Tesla, above: P/E 278 vs profit −47%, flagged and
+  followed up. This is the system's whole reason for existing, working end to end.
+- **No false alarms** — Apple, whose numbers told a consistent story, correctly returned
+  **0 contradictions**.
+- **Every number is sourced** — 9 financial metrics per company computed in Python from FMP,
+  risk from price history, news from fetched articles.
 
-_(Numbers filled from the actual sample run; a full 34-question run is out of scope for this
-portfolio version — the harness supports it via `uv run python -m eval.run_eval`.)_
+**Quantitative baseline-vs-panel table — harness is done, numbers pending API budget.**
+`eval/run_eval.py` scores both systems with the same metrics and LLM judge and writes
+`eval/results/comparison.json`. Running it over a meaningful sample needs more calls than a
+**free** LLM tier allows in a day (the demo tier used here is ~50 requests/day, which the
+live testing above exhausts). To produce the table, run it after the daily reset or with a
+small amount of API credit:
+
+```bash
+uv run python -m eval.run_eval        # full 34-question comparison
+```
+
+See [`docs/evaluation.md`](docs/evaluation.md) for metric definitions and honest caveats
+(LLM-judge bias; data is current, so it's a systems comparison, not a point-in-time backtest).
+Per project rule, **no number is written by hand** — the table stays empty until a real run
+fills it.
 
 ---
 

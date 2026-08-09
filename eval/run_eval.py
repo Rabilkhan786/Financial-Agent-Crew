@@ -68,12 +68,14 @@ def run_all(out_path: Path | None = None, questions=None):
         # One question failing (e.g. a transient free-tier rate limit) must not
         # abandon the whole eval — skip it and keep going.
         try:
+            # Run BOTH systems first; only record the question if both succeed, so
+            # the two result lists always cover the exact same questions.
             ans = run_baseline(q)
+            report = run_panel(q.question)
+            conclusion, flagged, firm = report_to_answer(report)
             baseline_results.append(
                 result_from(q, ans.conclusion, ans.flagged_contradiction, ans.firm_conclusion)
             )
-            report = run_panel(q.question)
-            conclusion, flagged, firm = report_to_answer(report)
             panel_results.append(result_from(q, conclusion, flagged, firm))
             print(f"  scored {q.id}")
         except Exception as error:  # noqa: BLE001 - skip a failed question, keep the eval going

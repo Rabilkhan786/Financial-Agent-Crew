@@ -1,1 +1,1 @@
-"""LLM access: a swappable factory and a token/cost usage tracker."""
+"""LLM access: a swappable, multi-provider chat-model factory."""
