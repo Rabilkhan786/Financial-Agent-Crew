@@ -38,6 +38,8 @@ def detect_contradictions(
     financial: list[FinancialFinding],
     news: list[NewsFinding],
     risk: list[RiskFinding],
+    peer_comparison: dict[str, dict[str, float]] | None = None,
+    target_ticker: str | None = None,
 ) -> list[Contradiction]:
     """The deterministic core cross-check. Pure function, fully unit-testable.
 
@@ -127,6 +129,50 @@ def detect_contradictions(
             ),
         ))
 
+    # Detector 5: earnings quality — reported profit is growing, but operating cash
+    # flow doesn't back it up. This is a number-vs-number check a single LLM won't do.
+    ocf = by_metric.get("operating_cash_flow")
+    if profit is not None and profit.value > 0 and ocf is not None and not ocf.healthy:
+        contradictions.append(Contradiction(
+            between=("financial", "news"),
+            description=(
+                "Reported profit is growing, but operating cash flow doesn't back it up — "
+                "a possible earnings-quality red flag."
+            ),
+            follow_up_target="news",
+            follow_up_question=(
+                "Are there recent disclosures (one-off gains, accounting changes, receivables "
+                "build-up) explaining why cash flow lags reported profit?"
+            ),
+        ))
+
+    # Detector 6: peer-relative — the company is growing far slower than its actual
+    # competitors. Uses the sourced peer table (something a single LLM can't reliably build).
+    if peer_comparison and target_ticker:
+        target = target_ticker.upper()
+        for metric_name in ("revenue_growth", "profit_growth"):
+            values = peer_comparison.get(metric_name, {})
+            target_val = values.get(target)
+            peers = [v for t, v in values.items() if t != target]
+            if target_val is None or not peers:
+                continue
+            peer_avg = sum(peers) / len(peers)
+            # Materially behind: below half the (positive) peer average and a >10pt gap.
+            if peer_avg > 0 and target_val < peer_avg * 0.5 and (peer_avg - target_val) > 10:
+                contradictions.append(Contradiction(
+                    between=("financial", "news"),
+                    description=(
+                        f"{metric_name.replace('_', ' ')} is {target_val:.0f}% versus a peer "
+                        f"average of {peer_avg:.0f}% — the company is growing well behind its competitors."
+                    ),
+                    follow_up_target="news",
+                    follow_up_question=(
+                        f"What company-specific issues explain {target}'s "
+                        f"{metric_name.replace('_', ' ')} lagging its peers so badly?"
+                    ),
+                ))
+                break  # one peer-lag flag is enough
+
     return contradictions
 
 
@@ -160,10 +206,14 @@ class AnalystAgent(BaseAgent):
         financial: list[FinancialFinding],
         news: list[NewsFinding],
         risk: list[RiskFinding],
+        peer_comparison: dict[str, dict[str, float]] | None = None,
+        target_ticker: str | None = None,
     ) -> list[Contradiction]:
         """Return contradictions from the deterministic detectors, plus (if an LLM
         is available) any additional ones the model spots. The detectors always run."""
-        contradictions = detect_contradictions(financial, news, risk)
+        contradictions = detect_contradictions(
+            financial, news, risk, peer_comparison, target_ticker
+        )
         if self.llm is not None:
             contradictions.extend(self._llm_cross_check(financial, news, risk))
         self.trace({

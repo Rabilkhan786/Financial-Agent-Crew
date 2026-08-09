@@ -48,7 +48,7 @@ class FakeAnalyst:
         self.cross_check_calls = 0
         self.last_write_args = None
 
-    def cross_check(self, financial, news, risk):
+    def cross_check(self, financial, news, risk, peer_comparison=None, target_ticker=None):
         self.cross_check_calls += 1
         return self._sequence.pop(0) if self._sequence else []
 

@@ -41,6 +41,11 @@ LANGSMITH_PROJECT = os.getenv("LANGSMITH_PROJECT", "investpanel")
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "gemini")
 LLM_TEMPERATURE = 0.0  # deterministic-ish: we want analysis, not creative writing
 
+# Optional: give the ANALYST a stronger model than the specialists (its cross-check
+# is the hard reasoning step). Leave blank to use the same model as everyone else.
+# Same provider, just a different model name — e.g. "openai/gpt-oss-120b" on Groq.
+ANALYST_MODEL = os.getenv("ANALYST_MODEL") or None
+
 # Each provider needs only its own key when it's the one selected. A default model
 # is set per provider but can be overridden in .env.
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")

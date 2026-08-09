@@ -35,13 +35,23 @@ class Panel:
 
 
 def build_panel() -> Panel:
-    """Construct the real agents. Each needs its API key only when actually run."""
+    """Construct the real agents. Each needs its API key only when actually run.
+
+    If config.ANALYST_MODEL is set, the analyst gets that (stronger) model while the
+    specialists use the default — its cross-check is the reasoning-heavy step.
+    """
+    from investpanel.llm.factory import get_llm
+
+    analyst = AnalystAgent()
+    if config.ANALYST_MODEL:
+        analyst = AnalystAgent(llm=get_llm(model=config.ANALYST_MODEL))
+
     return Panel(
         manager=ManagerAgent(),
         financial=FinancialAgent(),
         news=NewsAgent(),
         risk=RiskAgent(),
-        analyst=AnalystAgent(),
+        analyst=analyst,
     )
 
 
@@ -108,10 +118,13 @@ def build_workflow(panel: Panel):
         return update
 
     def analyst_node(state: PanelState) -> dict:
+        scope = state.get("scope")
         contradictions = panel.analyst.cross_check(
             state.get("financial_findings", []),
             state.get("news_findings", []),
             state.get("risk_findings", []),
+            peer_comparison=state.get("peer_comparison"),
+            target_ticker=scope.ticker if scope else None,
         )
         return {
             "contradictions": contradictions,

@@ -147,6 +147,49 @@ def test_analyst_catches_expensive_but_shrinking(monkeypatch):
     assert c.follow_up_target == "news"
 
 
+def test_analyst_catches_earnings_quality_flag():
+    # Profit growing but operating cash flow flagged unhealthy -> earnings-quality tension.
+    from investpanel.models.findings import FinancialFinding
+
+    financial = [
+        FinancialFinding(metric="profit_growth", value=25.0, unit="percent_yoy", period="2025",
+                         source="FMP", interpretation="up", healthy=True),
+        FinancialFinding(metric="operating_cash_flow", value=-500.0, unit="currency", period="2025",
+                         source="FMP", interpretation="weak vs profit", healthy=False),
+    ]
+    descriptions = [c.description for c in detect_contradictions(financial, [], [])]
+    assert any("earnings-quality" in d for d in descriptions)
+
+
+def test_analyst_catches_peer_lag():
+    # Target growing far slower than its peers -> peer-relative contradiction.
+    from investpanel.models.findings import FinancialFinding
+
+    financial = [
+        FinancialFinding(metric="revenue_growth", value=3.0, unit="percent_yoy", period="2025",
+                         source="FMP", interpretation="slow", healthy=True),
+    ]
+    peer_comparison = {"revenue_growth": {"TGT": 3.0, "PEER1": 40.0, "PEER2": 35.0}}
+    contradictions = detect_contradictions(
+        financial, [], [], peer_comparison=peer_comparison, target_ticker="TGT"
+    )
+    assert any("behind its competitors" in c.description for c in contradictions)
+
+
+def test_analyst_no_peer_lag_when_in_line():
+    from investpanel.models.findings import FinancialFinding
+
+    financial = [
+        FinancialFinding(metric="revenue_growth", value=30.0, unit="percent_yoy", period="2025",
+                         source="FMP", interpretation="fine", healthy=True),
+    ]
+    peer_comparison = {"revenue_growth": {"TGT": 30.0, "PEER1": 32.0, "PEER2": 28.0}}
+    contradictions = detect_contradictions(
+        financial, [], [], peer_comparison=peer_comparison, target_ticker="TGT"
+    )
+    assert not any("behind its competitors" in c.description for c in contradictions)
+
+
 def test_analyst_no_contradiction_when_expensive_but_growing():
     # Expensive but GROWING is not a contradiction by this detector.
     from investpanel.models.findings import FinancialFinding
