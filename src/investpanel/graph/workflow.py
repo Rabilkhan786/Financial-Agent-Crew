@@ -166,10 +166,39 @@ def run_panel(question: str):
     """Convenience: run the real panel end to end and return the Report.
 
     Needs all API keys. The recursion limit is set generously above the small
-    number of loop steps our bounded follow-up can produce.
+    number of loop steps our bounded follow-up can produce. We also write one
+    consolidated "panel_run" trace so the observability tab has per-run numbers
+    (latency, completeness, whether the loop fired) to aggregate later.
     """
+    import time
+
+    from investpanel.utils.tracing import save_trace
+
     workflow = build_workflow(build_panel())
     # Each round adds ~2 steps (specialist + analyst); give clear headroom.
     limit = 10 + config.MAX_FOLLOWUP_ROUNDS * 3
+
+    start = time.perf_counter()
     final_state = workflow.invoke({"question": question}, {"recursion_limit": limit})
-    return final_state["report"]
+    latency = round(time.perf_counter() - start, 3)
+
+    report = final_state["report"]
+    answered = sum(
+        1 for v in report.checklist_answers.values()
+        if v and "insufficient evidence" not in v.lower()
+    )
+    total = len(report.checklist_answers) or 1
+    save_trace("panel_run", {
+        "company": report.company,
+        "question": question,
+        "latency_seconds": latency,
+        "contradictions_found": len(report.contradictions_found),
+        "contradictions_resolved": report.contradictions_resolved,
+        "loop_fired": report.contradictions_resolved > 0,
+        "checklist_completeness": round(answered / total, 3),
+        "num_financial": len(report.financial_findings),
+        "num_news": len(report.news_findings),
+        "num_risk": len(report.risk_findings),
+        "errors": final_state.get("errors", []),
+    })
+    return report

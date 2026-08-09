@@ -88,7 +88,7 @@ Phase 2  Baseline (single LLM + search)                [~] code+tests done, GATE
 Phase 3  Financial + News + Risk agents                [~] code+tests done, GATE 3 run pending keys
 Phase 4  Manager + Analyst + cross-check loop           [~] code+tests done, GATE 4 run pending keys
 Phase 5  Full eval, error analysis, ablation            [~] harness (run_eval.py) done; numbers pending keys
-Phase 6  Streamlit, Docker, deploy, docs                [ ] not started
+Phase 6  Streamlit, Docker, deploy, docs                [~] app+docker+docs+README done; deploy+numbers pending keys
 ```
 
 **Last completed:** Phase 1 — `eval/datasets/heldout_questions.py` (34 hand-built, date-
@@ -101,14 +101,21 @@ judge, contradiction catch rate, confidently-wrong rate, cost/latency). 11 unit 
 companies and sharpen any "reasonable_read" you disagree with, then re-run
 `uv run python -m eval.datasets.heldout_questions` to regenerate the JSON.
 
-**Next action (BLOCKED ON KEYS):** everything remaining needs the 4 API keys in `.env`.
-Once added, run in order: `check_gate0.py` (GATE 0) -> `python -m eval.baselines.single_llm_search`
-(GATE 2) -> `demo_gate3.py AAPL` (GATE 3, verify/adjust FMP field names) -> `run.py "..."` on
-5 companies incl. one with a contradiction (GATE 4) -> `python -m eval.run_eval` (Phase 5
-numbers). Then Phase 5 error analysis + ablation, then Phase 6 (app.py Streamlit + obs tab +
-report export, Dockerfile, docs, deploy, README results table with REAL numbers only).
-`eval/run_eval.py` harness is written and unit-tested (adapter logic). Do NOT fabricate any
-README number — hard rule #2.
+**Next action (BLOCKED ON KEYS/QUOTA):** all code + docs are written; only live runs remain.
+Gemini key in `.env` is unusable (starts `AQ.`, project free-tier quota = 0 -> 429; needs an
+`AIza` key or billing). FMP/AV/Tavily still empty. Once a working Gemini key + the other 3 are
+in `.env`, run in order: `check_gate0.py` (GATE 0) -> `python -m eval.baselines.single_llm_search`
+(GATE 2) -> `demo_gate3.py AAPL Apple` (GATE 3, verify/adjust FMP `_pick` field names) ->
+`run.py "..."` on 5 companies incl. one with a contradiction (GATE 4) -> `python -m eval.run_eval`
+(Phase 5 numbers) -> paste REAL numbers into README + docs/evaluation.md, then Phase 5 error
+analysis + ablation, then deploy the Streamlit app + add live link/screenshot. Do NOT fabricate
+any number — hard rule #2.
+
+**Phase 6 done (code):** `app.py` (Streamlit: research tab w/ report export + observability tab
+reading panel_run traces), `utils/report_export.py` (Report -> Markdown), `utils/trace_stats.py`
+(aggregate panel_run traces), `run_panel` now writes a consolidated `panel_run` trace
+(latency/completeness/loop-fired), `Dockerfile`, `.dockerignore`, `Makefile`, all four `docs/*.md`,
+`README.md` (results table left as explicit placeholders). streamlit+pandas added. 40 tests pass.
 
 **Phase 4 done (code):** `agents/manager.py` (parses question, finds competitors via real
 search, company description from FMP profile), `agents/analyst.py` — the core cross-check as

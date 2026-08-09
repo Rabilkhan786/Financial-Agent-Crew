@@ -14,8 +14,10 @@ dependencies = [
     "langchain-google-genai>=4.3.2",
     "langgraph>=1.2.10",
     "langsmith>=0.10.17",
+    "pandas>=3.0.5",
     "pydantic>=2.13.4",
     "python-dotenv>=1.2.2",
+    "streamlit>=1.61.1",
     "trafilatura>=2.2.0",
 ]
 
@@ -38,3 +40,5 @@ testpaths = ["tests"]
 # Put the project root on sys.path so tests can import the top-level "eval" package
 # (the "investpanel" package is installed into the venv, so it's already importable).
 pythonpath = ["."]
+# Keep pytest's temp dirs inside the project — the system temp isn't writable here.
+addopts = "--basetemp=.pytest_tmp"
