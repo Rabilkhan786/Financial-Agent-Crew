@@ -62,14 +62,24 @@ def build_workflow(panel: Panel):
     def financial_node(state: PanelState) -> dict:
         scope = state["scope"]
         followup = _is_followup_for(state, "financial")
+        update: dict = {}
+
+        # Analyse the target on its own. If this fails, we degrade to no financials.
         try:
-            update: dict = {"financial_findings": panel.financial.analyze(scope.ticker)}
-            if not followup:
-                # Build the peer table once, on the first pass, from target + competitors.
+            update["financial_findings"] = panel.financial.analyze(scope.ticker)
+        except Exception as error:  # noqa: BLE001 - graceful degradation
+            update["financial_findings"] = []
+            update["errors"] = [f"financial: {error}"]
+
+        # Build the peer table separately (first pass only). A failure here must NOT
+        # discard the target's own findings, so it's in its own try.
+        if not followup:
+            try:
                 tickers = [t for t in [scope.ticker, *scope.competitors] if t]
                 update["peer_comparison"] = panel.financial.peer_metric_table(tickers)
-        except Exception as error:  # noqa: BLE001 - graceful degradation: one specialist failing must not sink the run
-            update = {"financial_findings": [], "errors": [f"financial: {error}"]}
+            except Exception as error:  # noqa: BLE001 - peer table is a nice-to-have
+                update["errors"] = update.get("errors", []) + [f"peer_comparison: {error}"]
+
         if followup:
             update["rounds"] = state.get("rounds", 0) + 1
         return update

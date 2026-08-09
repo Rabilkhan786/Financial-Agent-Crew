@@ -17,6 +17,9 @@ from investpanel import config
 from investpanel.agents.base import BaseAgent
 from investpanel.models.findings import FinancialFinding
 from investpanel.tools import fmp_client
+from investpanel.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 def _pick(row: dict, *names: str):
@@ -196,6 +199,13 @@ class FinancialAgent(BaseAgent):
         """
         table: dict[str, dict[str, float]] = {}
         for ticker in tickers:
-            for finding in self.analyze(ticker):
+            # One competitor we can't fetch (e.g. a symbol FMP's plan doesn't cover)
+            # must not sink the whole table — skip it and keep the rest.
+            try:
+                findings = self.analyze(ticker)
+            except Exception as error:  # noqa: BLE001 - a bad peer is skipped, not fatal
+                logger.warning("Skipping peer %s: %s", ticker, error)
+                continue
+            for finding in findings:
                 table.setdefault(finding.metric, {})[ticker.upper()] = finding.value
         return table
