@@ -37,7 +37,7 @@ LANGSMITH_PROJECT = os.getenv("LANGSMITH_PROJECT", "investpanel")
 # --- LLM settings ------------------------------------------------------------
 # Which provider the factory hands out by default. Change LLM_PROVIDER in .env to
 # switch every agent at once — no code change needed. Supported values:
-#   "gemini" (Google) · "openai" (ChatGPT) · "anthropic" (Claude) · "groq" · "deepseek"
+#   "gemini" · "openai" · "anthropic" · "groq" · "deepseek" · "openrouter"
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "gemini")
 LLM_TEMPERATURE = 0.0  # deterministic-ish: we want analysis, not creative writing
 
@@ -60,6 +60,13 @@ GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
 DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
 DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+
+# OpenRouter is a gateway to many models behind one OpenAI-compatible API. It has
+# free model variants (e.g. "deepseek/deepseek-r1:free"), so it's a way to run
+# DeepSeek R1 at no cost. Model names are namespaced as "vendor/model".
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "deepseek/deepseek-r1:free")
+OPENROUTER_BASE_URL = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
 
 # --- External call behaviour -------------------------------------------------
 HTTP_TIMEOUT_SECONDS = 30

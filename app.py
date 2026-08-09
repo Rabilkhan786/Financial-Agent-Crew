@@ -65,7 +65,7 @@ def _render_report(report) -> None:
             st.write(f"**News · {n.headline}** ({n.published_date}) — {n.source_url}")
 
     st.download_button(
-        "⬇️ Download this report (Markdown)",
+        "⬇ Download this report (Markdown)",
         data=report_to_markdown(report),
         file_name=f"investpanel_{report.company.replace(' ', '_')}.md",
         mime="text/markdown",
