@@ -82,10 +82,10 @@ Update this section at the end of every phase, before committing. This is how co
 survives between sessions when the user runs `/clear`.
 
 ```
-Phase 0  Skeleton, LLM factory, tracing, API clients   [~] GATE 0 4/5 live (FMP+AV+Tavily+trace PASS; LLM needs a valid key)
+Phase 0  Skeleton, LLM factory, tracing, API clients   [x] GATE 0 PASSED live (all 5, LLM via OpenRouter free model)
 Phase 1  Ground-truth question set, metrics            [x] GATE 1 passed (mock-tested, no keys)
 Phase 2  Baseline (single LLM + search)                [~] code+tests done, GATE 2 run pending keys
-Phase 3  Financial + News + Risk agents                [~] code+tests done, GATE 3 run pending keys
+Phase 3  Financial + News + Risk agents                [x] GATE 3 verified live (AAPL: Financial+Risk+News all sourced)
 Phase 4  Manager + Analyst + cross-check loop           [~] code+tests done, GATE 4 run pending keys
 Phase 5  Full eval, error analysis, ablation            [~] harness (run_eval.py) done; numbers pending keys
 Phase 6  Streamlit, Docker, deploy, docs                [~] app+docker+docs+README done; deploy+numbers pending keys
@@ -101,16 +101,19 @@ judge, contradiction catch rate, confidently-wrong rate, cost/latency). 11 unit 
 companies and sharpen any "reasonable_read" you disagree with, then re-run
 `uv run python -m eval.datasets.heldout_questions` to regenerate the JSON.
 
-**Next action (ONE BLOCKER LEFT — a valid LLM key):** GATE 0 is 4/5 live — FMP (migrated to
-the `stable` API), Alpha Vantage, Tavily, and tracing all PASS. The ONLY failure is the LLM:
-the Gemini key has 0 free-tier quota (429) and the OpenAI key in the env is invalid (401).
-The factory is now multi-provider (LLM_PROVIDER = gemini | openai | anthropic | groq) — set
-`LLM_PROVIDER` in `.env` to whichever the user has a valid key for (Groq has a free tier).
-Once one LLM key works: `check_gate0.py` (full GATE 0) -> `demo_gate3.py AAPL Apple` (GATE 3)
--> `python -m eval.baselines.single_llm_search` (GATE 2) -> `run.py "..."` on 5 companies incl.
-a contradiction (GATE 4) -> `python -m eval.run_eval` (Phase 5 numbers) -> paste REAL numbers
-into README + docs/evaluation.md -> Phase 5 error analysis + ablation -> deploy + screenshot.
-Do NOT fabricate any number — hard rule #2. FMP field names already verified against live data.
+**LLM PROVIDER (working):** `.env` uses `LLM_PROVIDER=openrouter` with
+`OPENROUTER_MODEL=nvidia/nemotron-3-super-120b-a12b:free` (free). DeepSeek `:free` on
+OpenRouter is now paid-only; other free models exist (also verified: `openai/gpt-oss-20b:free`,
+`nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free`). The free model is SLOW (~7-40s/call),
+so the full 34x2 eval will be long — consider `gpt-oss-20b:free` as a faster workhorse, or run
+the eval on a subset first. Factory supports gemini|openai|anthropic|groq|deepseek|openrouter.
+
+**Next action:** GATE 4 — a full `run.py` end-to-end was launched for Apple (verify report +
+disclaimer + any contradiction). To DEMONSTRATE the cross-check loop live, pick a value-trap-ish
+name (cheap P/E + a weak fundamental + elevated vol) so detector 3 fires, or rely on LLM
+augmentation. Then GATE 2 (`python -m eval.baselines.single_llm_search`) and the full eval
+(`python -m eval.run_eval`) -> paste REAL numbers into README + docs/evaluation.md -> Phase 5
+error analysis + ablation -> deploy + screenshot. Do NOT fabricate any number (hard rule #2).
 
 **SECURITY (resolved):** the user twice pasted real keys into `.env.example` (a tracked file);
 one paste (FMP/AV/Tavily/LangSmith) got committed in the old Phase 6 commit. History was
