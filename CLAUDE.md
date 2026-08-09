@@ -82,7 +82,7 @@ Update this section at the end of every phase, before committing. This is how co
 survives between sessions when the user runs `/clear`.
 
 ```
-Phase 0  Skeleton, LLM factory, tracing, API clients   [~] code complete, GATE 0 pending keys
+Phase 0  Skeleton, LLM factory, tracing, API clients   [~] GATE 0 4/5 live (FMP+AV+Tavily+trace PASS; LLM needs a valid key)
 Phase 1  Ground-truth question set, metrics            [x] GATE 1 passed (mock-tested, no keys)
 Phase 2  Baseline (single LLM + search)                [~] code+tests done, GATE 2 run pending keys
 Phase 3  Financial + News + Risk agents                [~] code+tests done, GATE 3 run pending keys
@@ -101,15 +101,22 @@ judge, contradiction catch rate, confidently-wrong rate, cost/latency). 11 unit 
 companies and sharpen any "reasonable_read" you disagree with, then re-run
 `uv run python -m eval.datasets.heldout_questions` to regenerate the JSON.
 
-**Next action (BLOCKED ON KEYS/QUOTA):** all code + docs are written; only live runs remain.
-Gemini key in `.env` is unusable (starts `AQ.`, project free-tier quota = 0 -> 429; needs an
-`AIza` key or billing). FMP/AV/Tavily still empty. Once a working Gemini key + the other 3 are
-in `.env`, run in order: `check_gate0.py` (GATE 0) -> `python -m eval.baselines.single_llm_search`
-(GATE 2) -> `demo_gate3.py AAPL Apple` (GATE 3, verify/adjust FMP `_pick` field names) ->
-`run.py "..."` on 5 companies incl. one with a contradiction (GATE 4) -> `python -m eval.run_eval`
-(Phase 5 numbers) -> paste REAL numbers into README + docs/evaluation.md, then Phase 5 error
-analysis + ablation, then deploy the Streamlit app + add live link/screenshot. Do NOT fabricate
-any number — hard rule #2.
+**Next action (ONE BLOCKER LEFT — a valid LLM key):** GATE 0 is 4/5 live — FMP (migrated to
+the `stable` API), Alpha Vantage, Tavily, and tracing all PASS. The ONLY failure is the LLM:
+the Gemini key has 0 free-tier quota (429) and the OpenAI key in the env is invalid (401).
+The factory is now multi-provider (LLM_PROVIDER = gemini | openai | anthropic | groq) — set
+`LLM_PROVIDER` in `.env` to whichever the user has a valid key for (Groq has a free tier).
+Once one LLM key works: `check_gate0.py` (full GATE 0) -> `demo_gate3.py AAPL Apple` (GATE 3)
+-> `python -m eval.baselines.single_llm_search` (GATE 2) -> `run.py "..."` on 5 companies incl.
+a contradiction (GATE 4) -> `python -m eval.run_eval` (Phase 5 numbers) -> paste REAL numbers
+into README + docs/evaluation.md -> Phase 5 error analysis + ablation -> deploy + screenshot.
+Do NOT fabricate any number — hard rule #2. FMP field names already verified against live data.
+
+**SECURITY (resolved):** the user twice pasted real keys into `.env.example` (a tracked file);
+one paste (FMP/AV/Tavily/LangSmith) got committed in the old Phase 6 commit. History was
+rewritten (amend + reflog expire + gc) so no secret remains in any commit; nothing was ever
+pushed (no remote). Keys now live only in `.env` (gitignored). User should still ROTATE the
+FMP/AV/Tavily/LangSmith keys to be safe, and only ever edit `.env`, never `.env.example`.
 
 **Phase 6 done (code):** `app.py` (Streamlit: research tab w/ report export + observability tab
 reading panel_run traces), `utils/report_export.py` (Report -> Markdown), `utils/trace_stats.py`
