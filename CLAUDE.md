@@ -1,0 +1,318 @@
+# CLAUDE.md — InvestPanel
+
+This file is loaded automatically at the start of every Claude Code session in this
+repository. It is the persistent memory for this project. Read it fully before acting.
+
+The complete build specification is at `docs/BUILD_SPEC.md`. This file is the short
+version plus the live status. When the two disagree, `docs/BUILD_SPEC.md` wins.
+
+## Execution mode
+
+Run in autonomous mode by default. Do not wait for the user to say "continue" between
+ordinary steps inside a phase, and do not ask permission for routine decisions the spec
+already answers. Decide from this file and `docs/BUILD_SPEC.md`, then act.
+
+Stop and ask only when:
+- you have reached a **phase gate** — show what was built, explain it in plain English,
+  and wait
+- a required API key or account is missing and you cannot proceed without it
+- the spec is genuinely silent on a decision that would be expensive to reverse later
+- two consecutive attempts at the same problem have failed — stop, report what was tried,
+  propose the fix, then continue rather than trying a third time silently
+
+At the very start of a session: read this file, read the Status section, state in one
+sentence what you're about to do, then go.
+
+---
+
+## Project
+
+**InvestPanel** — a multi-agent investment research panel. A manager agent dispatches
+three specialists (financial, news, risk) to research a company in parallel. An analyst
+agent checks whether their findings actually agree with each other — not just merges them
+— and can send a specific follow-up back to one specialist before writing the final
+report.
+
+The person you are working with is not writing code. They are learning from what you
+build. Explain every file in plain English as you create it, in 2–4 sentences: what it
+does and why it exists. Avoid jargon; define any unavoidable term once.
+
+**This produces informational analysis, not investment advice.** Every report generated
+by the system must carry a visible disclaimer stating this. Build the disclaimer into the
+report template from Phase 0, not bolted on later.
+
+---
+
+## Hard rules — never break these
+
+1. **Build order is fixed.** Data loaders and the evaluation harness come before agents.
+   Baselines before the panel. If asked to jump ahead to the agents, say no and explain:
+   without baselines there is no way to know whether the panel actually helps.
+2. **Never fabricate a number.** Every figure in the README must be produced by a script
+   in `eval/` that anyone can re-run. If the panel loses to a single-agent baseline,
+   report that honestly and analyse why.
+3. **No unsourced facts.** No agent may assert a financial fact or news event without a
+   `source` field — a real API response or a real fetched URL. Enforce with a Pydantic
+   validator, not with prompt wording. Test it.
+4. **Every agent boundary is a Pydantic model.** No free-form strings between agents.
+5. **The Analyst's cross-check is the point of the project — it must be real.** It
+   compares numeric claims from the Financial agent against qualitative claims from the
+   News and Risk agents (e.g. "margins improved" vs "restructuring announced last month")
+   and must be able to detect a genuine mismatch and route a specific follow-up back to
+   the right specialist. Do not let this collapse into "summarize the three reports" —
+   that is the single most important thing to test and defend.
+6. **No MCP.** Direct API calls only, using plain Python HTTP clients. This was a
+   deliberate choice, not an oversight — do not introduce MCP servers.
+7. **Cache every external call.** Every API response, every search, every page fetch
+   goes to disk cache. Re-running the evaluation must not re-pay for the same queries.
+8. **Tracing from Phase 0.** LangSmith plus local JSON. A missing LangSmith key must
+   never break a run.
+9. **Stop at every gate.** Show the result, wait for the user to say continue.
+10. **Commit at every gate** with a clear message.
+11. **No test may make a real API call.** Mock the LLM and mock the data providers.
+12. **Every report ends with the disclaimer.** Not investment advice — informational
+    analysis only. This is a hardcoded template element, not something an agent decides
+    to include.
+
+---
+
+## Status — keep this updated
+
+Update this section at the end of every phase, before committing. This is how context
+survives between sessions when the user runs `/clear`.
+
+```
+Phase 0  Skeleton, LLM factory, tracing, API clients   [~] code complete, GATE 0 pending keys
+Phase 1  Ground-truth question set, metrics            [ ] not started
+Phase 2  Baseline (single LLM + search)                [ ] not started
+Phase 3  Financial + News + Risk agents                [ ] not started
+Phase 4  Manager + Analyst + cross-check loop           [ ] not started
+Phase 5  Full eval, error analysis, ablation            [ ] not started
+Phase 6  Streamlit, Docker, deploy, docs                [ ] not started
+```
+
+**Last completed:** Phase 0 code — folder structure, uv env (Python 3.11.15), config,
+cache+retry layer, FMP / Alpha Vantage / Tavily clients, article fetch, LLM factory
+(Gemini default, swappable), usage tracker, logging, tracing (local JSON always +
+LangSmith optional), all four Pydantic models with the frozen disclaimer, and
+`check_gate0.py`. Lint clean, all imports pass, disclaimer + source-required rules unit-verified.
+
+**Next action:** GATE 0 is not yet passed because the 4 API keys are missing. User must
+`cp .env.example .env`, add GEMINI / FMP / ALPHAVANTAGE / TAVILY keys, then run
+`uv run python check_gate0.py` — it must print PASS for all 5 checks. Then commit and start Phase 1.
+
+**Open problems:** GATE 0 live-API verification blocked on missing keys (checks currently
+SKIP, tracing PASSes). No code known-broken.
+
+**Decisions made that differ from the spec:** none functional. Notes: (1) the disk-cache +
+retry logic for all three clients lives in one file `tools/cache.py` so the caching rule is
+enforced in a single auditable place, rather than duplicated per client; (2) dropped the
+uv-generated `[project.scripts]` entry point — `run.py` will be the CLI (Phase 6);
+(3) pandas / matplotlib / scikit-learn / streamlit not installed yet — added in the phases
+that use them, to keep the env lean and honor build-order discipline.
+
+---
+
+## Architecture (one line each)
+
+```
+manager      reads the question, sets scope (company, time window), dispatches specialists
+financial    pulls real fundamentals (FMP) + price history (Alpha Vantage), with sources
+news         searches (Tavily) for recent events, fetches and summarizes real articles
+risk         computes volatility/exposure from the financial agent's own price data —
+             plain Python math, not a separate API
+analyst      cross-checks: do financial, news, and risk findings actually agree?
+             if not, sends a specific follow-up back to ONE specialist (max 2 rounds)
+             then writes the report, with the disclaimer, always
+```
+
+Loop: analyst -> one specialist, only when a specific contradiction is found. Max 2 rounds.
+
+---
+
+## Structure
+
+```
+investpanel/
+├── CLAUDE.md
+├── README.md                    results table at the top
+├── pyproject.toml               uv-managed
+├── uv.lock
+├── .python-version
+├── .env.example
+├── Makefile
+├── run.py                       CLI: analyze one company
+├── app.py                       Streamlit demo
+├── docs/
+│   ├── BUILD_SPEC.md
+│   ├── architecture.md
+│   ├── agent_contracts.md
+│   ├── evaluation.md
+│   └── interview_notes.md       written in Phase 6
+├── src/investpanel/
+│   ├── config.py
+│   ├── models/                  question, finding, contradiction, report
+│   ├── agents/                  base, manager, financial, news, risk, analyst
+│   ├── tools/
+│   │   ├── fmp_client.py        fundamentals
+│   │   ├── alphavantage_client.py   price history
+│   │   ├── search.py            Tavily
+│   │   ├── fetch.py             article text extraction
+│   │   ├── cache.py             disk cache for all of the above
+│   │   └── volatility.py        PURE PYTHON — std dev of returns, no LLM
+│   ├── graph/                   state, workflow, routing
+│   ├── llm/                     factory, usage
+│   └── utils/                   logging, tracing
+├── eval/
+│   ├── datasets/
+│   │   └── heldout_questions.py    hand-built, with what-was-knowable-at-the-time notes
+│   ├── baselines/
+│   │   └── single_llm_search.py
+│   ├── metrics.py                accuracy of reasoning vs known outcome, contradiction
+│   │                              catch rate, confidently-wrong rate
+│   ├── run_eval.py
+│   └── results/
+├── data/
+│   ├── heldout_questions.json
+│   └── cache/                    gitignored
+└── tests/
+```
+
+---
+
+## Code style — match a 1-2 year engineer, not a senior
+
+The person maintaining this code is early-career. Write code they can read, explain, and
+defend line by line in an interview — not code that impresses other senior engineers.
+
+- **Prefer plain, explicit code over clever abstractions.** A straightforward function with
+  a few if-statements beats a generic factory pattern or heavy metaclass magic. If there's
+  a simple way and a "proper enterprise" way, pick the simple way unless the spec
+  specifically calls for the structure (e.g. the Pydantic models, the LangGraph wiring —
+  those stay as specified, they're not optional complexity).
+- **No deep inheritance hierarchies beyond what's in the spec.** `agents/base.py` exists
+  because the spec calls for it — don't add further intermediate base classes on top.
+- **No metaprogramming, decorators beyond what a library requires, or clever one-liners.**
+  A list comprehension is fine; nested comprehensions or unpacking tricks are not.
+- **Comment the "why", briefly, in plain English**, especially anywhere the code enforces a
+  project rule (no-unsourced-facts, the disclaimer, the round limit) — the user needs to
+  point at that comment in an interview and explain the reasoning themselves.
+- **Standard library and the libraries in the stack only.** Don't reach for an extra
+  dependency to save a few lines of code.
+- **Functions and classes should be short and do one obvious thing.** If a function needs a
+  paragraph to explain, split it.
+- This does not mean skipping tests, type hints, or the schema validation — those stay.
+  It means the *implementation* inside each function stays simple enough that the user can
+  read it top to bottom and say what every line does.
+
+---
+
+## Conventions
+
+- Python 3.11+, type hints everywhere, Pydantic v2.
+- One responsibility per file. Split any file over ~200 lines.
+- All tunables in `config.py`. Never hardcode a magic number inside an agent.
+- Prompts live as module-level constants in their agent module, not inline in a function.
+- Every agent inherits from `agents/base.py` — retries, JSON parsing, schema validation,
+  trace emission live there. Agents themselves stay small.
+- Never commit `.env`, `data/cache/`, or any API key.
+
+---
+
+## Environment — uv and the virtual environment
+
+This project uses **uv** for Python and dependency management. uv creates and manages the
+virtual environment itself, at `.venv/` in the project root. Do **not** run
+`python -m venv` — uv makes that environment for you the first time you run `uv sync` or
+`uv add`.
+
+```
+uv init                      once, at the start of Phase 0
+uv python pin 3.11
+uv venv                      create .venv explicitly (uv sync also creates it)
+uv add langgraph pydantic httpx diskcache
+uv add --dev pytest ruff
+uv sync                      recreate the exact environment from uv.lock
+uv run python run.py         run anything inside .venv — no activation needed
+uv run pytest
+```
+
+Rules:
+
+- Prefer `uv run` over activating a shell manually.
+- `.venv/` is gitignored. `uv.lock` is committed.
+- Add dependencies with `uv add`, never by hand-editing `pyproject.toml`, never with
+  `pip install`.
+- The Makefile targets wrap uv: `make eval`, `make demo`, `make test`.
+- The Dockerfile in Phase 6 runs `uv sync --frozen`, not pip.
+
+---
+
+## Stack
+
+Python 3.11+ managed by **uv** · LangGraph · Pydantic v2 · LangSmith (optional) · Gemini
+by default via a swappable `llm/factory.py` · **FMP** for fundamentals · **Alpha Vantage**
+for price history · **Tavily** for news search · httpx · trafilatura · diskcache ·
+pandas · matplotlib · scikit-learn · Streamlit · pytest · Docker.
+
+**Deliberately not used:** MCP (direct API calls instead — a stated decision, not a gap),
+a separate risk-data API (volatility computed in plain Python from price data already
+fetched), vector database (nothing here needs embedding), fine-tuning.
+
+---
+
+## Model switching
+
+Switch with `/model` inside Claude Code. Match the model to the task, not the phase number.
+
+| Task type | Model | Why |
+|---|---|---|
+| Architecture, LangGraph design, the cross-check logic in the analyst agent | **Opus** | Hard to undo later; the cross-check is the core of the project |
+| Error analysis in Phase 5, deciding what to fix | **Opus** | Judgement work |
+| Debugging something that failed twice on Sonnet | **Opus** | Two failures means the problem needs more reasoning |
+| Writing agents, tools, loaders, tests, Streamlit app | **Sonnet** | Execution against an already-fixed design |
+| Refactors, docstrings, README filling | **Sonnet** | Mechanical work |
+| Bulk formatting, boilerplate | **Haiku** | Cheapest option for zero-ambiguity work |
+
+- Default to Sonnet. Escalate on the second failure, not the first.
+- Come back down to Sonnet once Opus solves the hard part.
+- Say out loud when you switch and why.
+- If a Pro usage limit is hit mid-phase, stop at a clean point, update Status, commit,
+  and tell the user exactly where to resume.
+
+---
+
+## Cost discipline
+
+The user is on a Claude Pro plan with usage limits, building across several sessions.
+
+- Follow the model switching table above.
+- Do not re-read files already read this session.
+- Keep responses focused — no long recaps beyond the required plain-English explanation.
+- Update the Status section at the end of every phase so the next session starts cold.
+
+---
+
+## Phase gates
+
+- **GATE 0** — `uv run python -c "..."` reaches Gemini; FMP, Alpha Vantage, and Tavily
+  clients each successfully return one real response; tracing writes a local JSON file.
+- **GATE 1** — 30–40 hand-built questions exist with documented what-was-knowable-then
+  context; metrics module unit-tested against a fixture.
+- **GATE 2** — baseline (single LLM + search) run over the question set, results committed.
+- **GATE 3** — for one company, print the financial findings, news findings, and risk
+  findings separately — each with sources.
+- **GATE 4** — end-to-end run on 5 companies, including at least one case where the
+  analyst agent catches a real contradiction and sends a follow-up. Full trace shown.
+- **GATE 5** — results table complete, error analysis with counts, one measured
+  improvement, one ablation.
+- **GATE 6** — a stranger can clone, add four API keys, and run it.
+
+---
+
+## First action in a new session
+
+1. Read this file.
+2. Read the Status section to find where the build stopped.
+3. State in one sentence what you are about to do.
+4. Do that phase only. Stop at its gate.

@@ -1,0 +1,52 @@
+"""Central configuration for InvestPanel.
+
+Every tunable number and every API key lives here, in one place, so no agent or
+tool hardcodes a "magic number" inside itself. Values are read from a local
+`.env` file (never committed) via python-dotenv. If a key is missing it stays
+``None`` here, and the tool that needs it raises a clear error at call time — the
+program does not crash on import just because one key is absent.
+"""
+
+import os
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+# Load key=value lines from a .env file in the project root into the environment.
+# Called once, here, so every other module can just read os.getenv results below.
+load_dotenv()
+
+# --- Project paths -----------------------------------------------------------
+# __file__ is .../src/investpanel/config.py, so two parents up is the repo root.
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DATA_DIR = PROJECT_ROOT / "data"
+CACHE_DIR = DATA_DIR / "cache"      # disk cache for every external API call
+TRACE_DIR = DATA_DIR / "traces"     # local JSON trace files, one per run
+
+# --- API keys (may be None until the user fills in .env) ---------------------
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+FMP_API_KEY = os.getenv("FMP_API_KEY")
+ALPHAVANTAGE_API_KEY = os.getenv("ALPHAVANTAGE_API_KEY")
+TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
+
+# --- LangSmith tracing (entirely optional) -----------------------------------
+# A missing LangSmith key must never break a run — we only turn it on if present.
+LANGSMITH_API_KEY = os.getenv("LANGSMITH_API_KEY")
+LANGSMITH_PROJECT = os.getenv("LANGSMITH_PROJECT", "investpanel")
+
+# --- LLM settings ------------------------------------------------------------
+# Gemini is the default provider. The factory in llm/factory.py can swap this.
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "gemini")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+LLM_TEMPERATURE = 0.0  # deterministic-ish: we want analysis, not creative writing
+
+# --- External call behaviour -------------------------------------------------
+HTTP_TIMEOUT_SECONDS = 30
+MAX_RETRIES = 3               # how many times to retry a failed HTTP call
+RETRY_BACKOFF_SECONDS = 2.0   # base wait between retries (grows each attempt)
+CACHE_TTL_SECONDS = 60 * 60 * 24 * 7  # cache every response for one week
+
+# --- Agent workflow bounds ---------------------------------------------------
+# Hard rule: the analyst may loop back to a specialist at most twice. This bound
+# lives here so it is impossible to accidentally change it inside the agent code.
+MAX_FOLLOWUP_ROUNDS = 2

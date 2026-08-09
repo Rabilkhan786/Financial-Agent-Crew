@@ -1,0 +1,37 @@
+[project]
+name = "investpanel"
+version = "0.1.0"
+description = "InvestPanel — a multi-agent investment research panel with an analyst cross-check."
+readme = "README.md"
+authors = [
+    { name = "rabilkhan786", email = "ahammedrabil@gmail.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "diskcache>=5.6.3",
+    "httpx>=0.28.1",
+    "langchain-core>=1.5.3",
+    "langchain-google-genai>=4.3.2",
+    "langgraph>=1.2.10",
+    "langsmith>=0.10.17",
+    "pydantic>=2.13.4",
+    "python-dotenv>=1.2.2",
+    "trafilatura>=2.2.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.11.6,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.16.2",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
