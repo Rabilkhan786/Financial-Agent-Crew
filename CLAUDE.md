@@ -86,7 +86,7 @@ Phase 0  Skeleton, LLM factory, tracing, API clients   [x] GATE 0 PASSED live (a
 Phase 1  Ground-truth question set, metrics            [x] GATE 1 passed (mock-tested, no keys)
 Phase 2  Baseline (single LLM + search)                [~] code+tests done, GATE 2 run pending keys
 Phase 3  Financial + News + Risk agents                [x] GATE 3 verified live (AAPL: Financial+Risk+News all sourced)
-Phase 4  Manager + Analyst + cross-check loop           [~] code+tests done, GATE 4 run pending keys
+Phase 4  Manager + Analyst + cross-check loop           [x] GATE 4 passed live (TSLA: caught P/E-vs-shrinking-profit, looped to News, 2 rounds)
 Phase 5  Full eval, error analysis, ablation            [~] harness (run_eval.py) done; numbers pending keys
 Phase 6  Streamlit, Docker, deploy, docs                [~] app+docker+docs+README done; deploy+numbers pending keys
 ```
