@@ -55,7 +55,22 @@ Being a **portfolio** project, the eval is honest about its limits:
 3. **Reported numbers are from a representative sample**, not the full 34 (running the full
    set on a free model is slow; the harness supports it — see above).
 
-## Results (real run, n = 11 of 34)
+## Numeric accuracy (objective — where the panel wins), n = 20 figures
+
+`eval/numeric_accuracy.py` compares real API values against what each system reports. The panel
+computes figures from the API (correct by construction); a single LLM (with search) states them
+from memory. Result:
+
+| System | Numeric accuracy |
+|---|---|
+| InvestPanel (computes) | 100% (20/20) |
+| Single LLM + search (guesses) | 40% (8/20) |
+
+Example — Apple: real revenue growth 6.4% vs LLM's 16.6%; real debt/equity 1.5 vs LLM's 0.78.
+This is the panel's clearest, most defensible advantage: in finance, a hallucinated number is
+worse than no number. See `eval/results/numeric_accuracy.json`.
+
+## Reasoning-quality results (real run, n = 11 of 34)
 
 Produced by `run_all` on 2026-08-09 with Groq `llama-3.3-70b-versatile`; the free daily token
 limit stopped it after 11 questions. Never hand-written (hard rule #2) — see

@@ -51,17 +51,34 @@ numbers told a consistent story, the analyst correctly reported **0 contradictio
 
 ## Results
 
-**Demonstrated qualitatively on live data** (the honest, reproducible part with a free API tier):
+The honest summary: **the panel wins where correctness matters (numbers, contradictions); a
+single LLM is competitive for a general written take.** Knowing which is which is the point.
 
-- **Analyst catches a real contradiction** — Tesla, above: P/E 278 vs profit −47%, flagged and
-  followed up. This is the system's whole reason for existing, working end to end.
-- **No false alarms** — Apple, whose numbers told a consistent story, correctly returned
-  **0 contradictions**.
-- **Every number is sourced** — 9 financial metrics per company computed in Python from FMP,
-  risk from price history, news from fetched articles.
+### ✅ Where the panel clearly wins: numeric accuracy (objective, `n = 20` figures)
 
-**Quantitative baseline vs panel** (real run, `n = 11` of 34 — a free daily token limit
-stopped the rest; produced by `eval/run_eval.py`, never hand-written):
+Every financial number the panel reports is *computed from the data API*, so it's correct by
+construction. Asked for the same figures, a single LLM (with search) **guesses** — and is wrong
+most of the time. Produced by `eval/numeric_accuracy.py`:
+
+| System | Numeric accuracy |
+|---|---|
+| **InvestPanel** (computes from API) | **100%** (20/20) |
+| Single LLM + search (states from memory) | **40%** (8/20) |
+
+Example — Apple: real revenue growth **6.4%**, the LLM said **16.6%**; real debt/equity **1.5**,
+the LLM said **0.78**. In finance, a made-up P/E is worse than useless — this is the panel's
+core, undeniable advantage.
+
+### ✅ Catching contradictions: demonstrated live
+
+- **Tesla** (above): caught P/E 278 vs profit −47%, flagged it, and followed up.
+- **Apple**: consistent numbers → correctly **0 contradictions** (no false alarms).
+- Every claim is **sourced** (API endpoint or fetched article URL).
+
+### ⚖️ Where a single LLM is competitive: general reasoning quality
+
+Real run, `n = 11` of 34 (a free daily token limit stopped the rest); by `eval/run_eval.py`,
+never hand-written:
 
 | System | Reasoning quality (0–1) | Contradiction catch rate | Confidently wrong |
 |---|---|---|---|

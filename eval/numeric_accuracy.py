@@ -79,8 +79,14 @@ def run(companies: list[tuple[str, str]], llm=None, searcher=None) -> dict:
     panel_correct = 0
     rows = []
     for company, ticker in companies:
-        actual = ground_truth_numbers(ticker)
-        stated = baseline_numbers(company, ticker, llm, searcher)
+        # Skip a company we can't fetch/query (e.g. a transient rate limit) instead
+        # of crashing the whole run.
+        try:
+            actual = ground_truth_numbers(ticker)
+            stated = baseline_numbers(company, ticker, llm, searcher)
+        except Exception as error:  # noqa: BLE001 - skip and continue
+            print(f"  SKIPPED {ticker}: {error}")
+            continue
         for metric, real in actual.items():
             total += 1
             panel_correct += 1  # panel value IS the API value, by construction
