@@ -26,6 +26,13 @@ FinancialMetric = Literal[
     "pe_ratio",
     "pb_ratio",
     "valuation_vs_growth",
+    # Margins — how much of each sales dollar survives to each level of profit.
+    "gross_margin",
+    "operating_margin",
+    "net_margin",
+    # Cash quality: operating cash flow divided by net income. Below ~1 for long
+    # means reported profit isn't turning into cash.
+    "cash_conversion",
 ]
 
 

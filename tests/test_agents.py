@@ -71,11 +71,17 @@ def test_compute_findings_produces_all_metrics_with_expected_values():
     findings = compute_findings(*_financial_fixture(), source="FMP test")
     by_metric = {f.metric: f for f in findings}
 
-    # All ten checklist metrics computable from this fixture.
+    # Everything computable from this fixture. No grossProfit field, so gross_margin
+    # is correctly absent rather than guessed.
     assert set(by_metric) == {
         "revenue_growth", "profit_growth", "operating_cash_flow", "debt_to_equity",
         "interest_coverage", "roce", "roe", "pe_ratio", "pb_ratio", "valuation_vs_growth",
+        "operating_margin", "net_margin", "cash_conversion",
     }
+    # Margins and cash conversion are plain arithmetic, never LLM output.
+    assert by_metric["operating_margin"].value == pytest.approx(200 / 1200, abs=1e-4)
+    assert by_metric["net_margin"].value == pytest.approx(130 / 1200, abs=1e-4)
+    assert by_metric["cash_conversion"].value == pytest.approx(150 / 130, abs=1e-4)
     assert by_metric["revenue_growth"].value == 20.0
     assert by_metric["revenue_growth"].healthy is True
     assert by_metric["debt_to_equity"].value == 0.5
@@ -88,9 +94,21 @@ def test_compute_findings_produces_all_metrics_with_expected_values():
     assert all(f.source for f in findings)
 
 
-def test_compute_findings_skips_when_data_missing():
-    # One year of income, no balance/cashflow/ratios -> nothing computable, no crash.
+def test_compute_findings_skips_what_it_cannot_compute():
+    # One year of income, no balance/cashflow/ratios. Margins need only that one
+    # row so they're computed; anything needing a second year or another statement
+    # is skipped rather than guessed.
     income = [{"calendarYear": "2023", "revenue": 100, "netIncome": 10, "operatingIncome": 20}]
+    metrics = {f.metric for f in compute_findings(income, [], [], {}, source="FMP test")}
+    assert metrics == {"operating_margin", "net_margin"}
+    assert "revenue_growth" not in metrics   # needs two years
+    assert "debt_to_equity" not in metrics   # needs the balance sheet
+    assert "cash_conversion" not in metrics  # needs the cash-flow statement
+
+
+def test_compute_findings_returns_nothing_without_revenue():
+    # No revenue -> margins are undefined, and we skip rather than divide by zero.
+    income = [{"calendarYear": "2023", "netIncome": 10}]
     assert compute_findings(income, [], [], {}, source="FMP test") == []
 
 

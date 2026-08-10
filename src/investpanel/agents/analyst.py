@@ -20,6 +20,10 @@ from investpanel.agents.base import BaseAgent
 from investpanel.models.contradiction import Contradiction, Tension
 from investpanel.models.findings import FinancialFinding, NewsFinding, RiskFinding
 from investpanel.models.report import Report
+from investpanel.utils.logging import get_logger
+from investpanel.utils.numeric_guard import verify_summary
+
+logger = get_logger(__name__)
 
 
 def _high_volatility(risk: list[RiskFinding]) -> bool:
@@ -379,7 +383,23 @@ class AnalystAgent(BaseAgent):
             reply = self._ensure_llm().invoke(prompt)
         except Exception:  # noqa: BLE001 - no key / rate limit / provider error: use the template
             return fallback
-        return getattr(reply, "content", str(reply)).strip() or fallback
+        text = getattr(reply, "content", str(reply)).strip()
+        if not text:
+            return fallback
+
+        # CHANGE 2's guarantee, enforced in code rather than trusted to the prompt:
+        # every figure in the prose must trace back to a number Python computed. If
+        # the model invented one, we drop the prose entirely rather than publish a
+        # fabricated financial figure.
+        allowed = [f.value for f in financial] + [r.value for r in risk]
+        clean, offenders = verify_summary(text, allowed)
+        if not clean:
+            logger.warning(
+                "Discarding generated summary: numbers not in the findings: %s", offenders
+            )
+            self.trace({"rejected_summary": text, "unsupported_numbers": offenders})
+            return fallback
+        return text
 
 
 # Which financial metric answers which checklist question.

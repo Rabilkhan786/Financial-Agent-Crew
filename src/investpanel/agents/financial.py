@@ -89,6 +89,22 @@ def compute_findings(
                 interpretation=f"Net income {'grew' if pgrowth > 0 else 'fell'} {pgrowth*100:.1f}% year over year.",
             ))
 
+    # Margins — how much of each sales dollar survives to each profit level. Pure
+    # arithmetic from the income statement; the LLM is never asked for these.
+    revenue_now = _pick(income[0], "revenue")
+    for metric, field, threshold, label in (
+        ("gross_margin", "grossProfit", config.HEALTHY_GROSS_MARGIN_MIN, "Gross"),
+        ("operating_margin", "operatingIncome", config.HEALTHY_OPERATING_MARGIN_MIN, "Operating"),
+        ("net_margin", "netIncome", config.HEALTHY_NET_MARGIN_MIN, "Net"),
+    ):
+        margin = _safe_div(_pick(income[0], field), revenue_now)
+        if margin is not None:
+            findings.append(_finding(
+                metric, margin, "ratio", period, source,
+                healthy=margin > threshold,
+                interpretation=f"{label} margin is {margin*100:.1f}% of revenue.",
+            ))
+
     # Q4 operating cash flow (healthy if positive and roughly backing net income).
     ocf = _pick(cashflow[0], "operatingCashFlow", "netCashProvidedByOperatingActivities") if cashflow else None
     if ocf is not None:
@@ -103,6 +119,19 @@ def compute_findings(
                 "Operating cash flow is weak relative to reported profit — a quality flag."
             ),
         ))
+
+        # Cash conversion: does reported profit actually arrive as cash? Computed
+        # here rather than left to interpretation, because "profit up, cash flat"
+        # is one of the most useful signals on the whole statement.
+        conversion = _safe_div(ocf, ni_now)
+        if conversion is not None:
+            findings.append(_finding(
+                "cash_conversion", conversion, "ratio", period, source,
+                healthy=conversion > config.HEALTHY_CASH_CONVERSION_MIN,
+                interpretation=(
+                    f"Operating cash flow is {conversion:.2f}x reported net income."
+                ),
+            ))
 
     # Q5 debt-to-equity and interest coverage.
     if balance:

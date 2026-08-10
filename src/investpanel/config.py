@@ -95,6 +95,13 @@ HEALTHY_ROE_MIN = 0.12              # 12%+ return on equity
 HEALTHY_PE_MAX = 25.0               # above this looks expensive on earnings
 HEALTHY_PB_MAX = 5.0               # above this looks expensive on book value
 HEALTHY_PEG_MAX = 1.5              # valuation reasonable vs growth (PEG-like)
+# Margins vary hugely by sector, so these are deliberately loose "is it positive
+# and not vanishing" checks rather than pretending one number fits every industry.
+HEALTHY_GROSS_MARGIN_MIN = 0.20      # 20%+ gross margin
+HEALTHY_OPERATING_MARGIN_MIN = 0.05  # 5%+ operating margin
+HEALTHY_NET_MARGIN_MIN = 0.03        # 3%+ net margin
+# Operating cash flow should broadly keep up with reported profit.
+HEALTHY_CASH_CONVERSION_MIN = 0.8
 
 # --- Risk thresholds ---------------------------------------------------------
 # Annualized volatility above this is flagged as "elevated" by the Risk agent.

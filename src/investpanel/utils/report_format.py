@@ -20,13 +20,19 @@ METRIC_LABELS = {
     "pe_ratio": "P/E Ratio",
     "pb_ratio": "P/B Ratio",
     "valuation_vs_growth": "Valuation vs Growth (PEG-like)",
+    "gross_margin": "Gross Margin",
+    "operating_margin": "Operating Margin",
+    "net_margin": "Net Margin",
+    "cash_conversion": "Cash Conversion (OCF / Net Income)",
     "annualized_volatility": "Annualized Volatility",
     "max_drawdown": "Maximum Drawdown",
 }
 
 # Metrics whose raw value is a fraction (0.21) that should be shown as a plain
 # percent (21%, no +/- sign — it's a return level, not a change).
-_FRACTION_AS_PLAIN_PERCENT_METRICS = {"roce", "roe"}
+_FRACTION_AS_PLAIN_PERCENT_METRICS = {
+    "roce", "roe", "gross_margin", "operating_margin", "net_margin",
+}
 # Metrics already stored as a percent number (19.22, not 0.1922).
 _ALREADY_PERCENT_METRICS = {"revenue_growth", "profit_growth"}
 # Metrics shown as a "N×" multiple.
@@ -97,6 +103,8 @@ def format_metric_value(metric: str, value: float) -> str:
         return format_multiple(value)
     if metric in _TIMES_METRICS:
         return format_times(value)
+    if metric == "cash_conversion":
+        return format_multiple(value)
     if metric == "valuation_vs_growth":
         return format_ratio_plain(value)
     # Unknown metric: show a plain, still-rounded number rather than raw Python repr.

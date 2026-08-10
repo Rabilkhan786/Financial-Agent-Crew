@@ -294,13 +294,22 @@ _METRIC_QUESTIONS: dict[str, tuple[str, str]] = {
         "Is the valuation reasonable given growth (PEG-like)?",
         "Weighs the P/E against actual profit growth, rather than either alone.",
     ),
+    "gross_margin": ("How much of each sales dollar is gross profit?", "Shows pricing power and production cost efficiency."),
+    "operating_margin": ("Is the core business profitable after running costs?", "Strips out one-offs to show operating efficiency."),
+    "net_margin": ("How much of revenue becomes actual profit?", "The bottom line after every cost, tax and interest."),
+    "cash_conversion": (
+        "Does reported profit turn into cash?",
+        "Profit that never becomes cash is the classic earnings-quality warning sign.",
+    ),
     "annualized_volatility": ("Is market risk acceptable?", "Higher volatility means larger price swings to tolerate."),
     "max_drawdown": ("What is the historical downside?", "Shows the worst peak-to-trough loss an investor would have felt."),
 }
 
 # Canonical display order for the metric-backed checklist rows.
 _METRIC_ORDER = [
-    "revenue_growth", "profit_growth", "operating_cash_flow", "debt_to_equity",
+    "revenue_growth", "profit_growth",
+    "gross_margin", "operating_margin", "net_margin",
+    "operating_cash_flow", "cash_conversion", "debt_to_equity",
     "interest_coverage", "roce", "roe", "pe_ratio", "pb_ratio", "valuation_vs_growth",
     "annualized_volatility", "max_drawdown",
 ]
