@@ -12,6 +12,10 @@ from pydantic import BaseModel, Field
 class ResearchScope(BaseModel):
     company: str
     ticker: str | None = None
+    # The user's question rewritten as clear English (typos and grammar fixed, meaning
+    # unchanged). Kept so the report can show what the panel actually researched —
+    # if the correction misread the question, the user can see that immediately.
+    clarified_question: str | None = None
     # 2-3 real competitors found via search, so numbers can be compared to peers.
     competitors: list[str] = Field(default_factory=list)
     time_window: str = "last 12 months"

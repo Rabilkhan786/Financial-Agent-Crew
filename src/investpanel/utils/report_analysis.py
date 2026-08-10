@@ -235,6 +235,25 @@ def _metric_label(metric: str) -> str:
     return format_metric_label(metric)
 
 
+# Metrics worth charting against peers: comparable across companies and on a scale
+# where a bar chart is meaningful (cash flow, for instance, just tracks company size).
+CHARTABLE_PEER_METRICS = ["revenue_growth", "profit_growth", "roe", "pe_ratio"]
+
+
+def peer_chart_data(peer_comparison: dict[str, dict[str, float]]) -> dict[str, dict[str, float]]:
+    """{metric label: {ticker: raw value}} for the peer bar charts.
+
+    Only includes metrics that have at least two companies — a one-bar chart
+    comparing a company to nothing would be misleading.
+    """
+    charts = {}
+    for metric in CHARTABLE_PEER_METRICS:
+        values = peer_comparison.get(metric, {})
+        if len(values) >= 2:
+            charts[_metric_label(metric)] = values
+    return charts
+
+
 # --- Risk section ---------------------------------------------------------------
 
 def build_risk_summary(risk: list[RiskFinding]) -> list[dict[str, str]]:
@@ -411,6 +430,24 @@ def contradiction_status(report: Report, contradiction: Contradiction) -> str:
     if report.contradictions_resolved >= config.MAX_FOLLOWUP_ROUNDS:
         return "Not selected for follow-up (round limit reached)"
     return "Not selected for follow-up this round"
+
+
+def question_was_rewritten(report: Report) -> bool:
+    """True when the panel meaningfully reworded the user's question.
+
+    Used to show "Interpreted as: ..." only when it adds information. Casing and
+    punctuation differences don't count — surfacing those would just be noise.
+    """
+    original, interpreted = report.question, report.interpreted_question
+    if not original or not interpreted:
+        return False
+    return _comparable(original) != _comparable(interpreted)
+
+
+def _comparable(text: str) -> str:
+    """Lowercase, strip punctuation and collapse spaces, for comparing two questions."""
+    kept = "".join(ch if ch.isalnum() or ch.isspace() else " " for ch in text.lower())
+    return " ".join(kept.split())
 
 
 def crosscheck_conclusion(report: Report) -> tuple[str, str]:

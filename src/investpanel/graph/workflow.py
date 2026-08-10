@@ -21,6 +21,9 @@ from investpanel.agents.news import NewsAgent
 from investpanel.agents.risk import RiskAgent
 from investpanel.graph.routing import route_after_analyst
 from investpanel.graph.state import PanelState
+from investpanel.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -113,6 +116,12 @@ def build_workflow(panel: Panel):
         followup = _is_followup_for(state, "risk")
         try:
             update: dict = {"risk_findings": panel.risk.analyze(scope.ticker)}
+            # Keep the prices for the report's chart. Cached, so no extra API call —
+            # and a chart is a nice-to-have, so a failure here is silently skipped.
+            try:
+                update["price_history"] = panel.risk.price_series(scope.ticker)
+            except Exception as chart_error:  # noqa: BLE001 - chart data is optional
+                logger.warning("No price series for the chart: %s", chart_error)
         except Exception as error:  # noqa: BLE001 - graceful degradation
             update = {"risk_findings": [], "errors": [f"risk: {error}"]}
         if followup:
@@ -140,10 +149,13 @@ def build_workflow(panel: Panel):
         report = panel.analyst.write_report(
             company=scope.company,
             ticker=scope.ticker,
+            question=state.get("question"),
+            interpreted_question=scope.clarified_question,
             company_description=state.get("company_description", ""),
             financial=state.get("financial_findings", []),
             news=state.get("news_findings", []),
             risk=state.get("risk_findings", []),
+            price_history=state.get("price_history", []),
             contradictions=_dedup(state.get("all_contradictions", [])),
             contradictions_resolved=state.get("rounds", 0),
             peer_comparison=state.get("peer_comparison", {}),

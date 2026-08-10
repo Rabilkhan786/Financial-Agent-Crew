@@ -18,6 +18,8 @@ from investpanel.utils.report_analysis import (
     crosscheck_conclusion,
     data_freshness,
     evidence_quality,
+    peer_chart_data,
+    question_was_rewritten,
 )
 
 
@@ -152,7 +154,38 @@ def test_build_peer_table_empty_input_gives_empty_table():
     assert build_peer_table({}) == []
 
 
+def test_peer_chart_data_needs_at_least_two_companies():
+    # One company alone isn't a comparison — no chart for it.
+    assert peer_chart_data({"revenue_growth": {"NKE": 0.19}}) == {}
+    charts = peer_chart_data({"revenue_growth": {"NKE": 0.19, "ADDYY": 3.0}})
+    assert charts == {"Revenue Growth": {"NKE": 0.19, "ADDYY": 3.0}}
+
+
+def test_peer_chart_data_skips_metrics_that_dont_compare_well():
+    # Operating cash flow tracks company size, so it isn't charted against peers.
+    assert peer_chart_data({"operating_cash_flow": {"NKE": 2.8e9, "ADDYY": 1.0e9}}) == {}
+
+
 # --- contradiction follow-up status ---------------------------------------------
+
+def test_question_rewrite_is_shown_only_when_it_really_changed():
+    messy = Report(company="BMW", company_description="x", summary="s",
+                    question="bmw profit is how and is worth to invest it",
+                    interpreted_question="How is BMW's profit, and is it worth investing in?")
+    assert question_was_rewritten(messy) is True
+
+    # Punctuation/casing only -> not worth showing as a "correction".
+    cosmetic = Report(company="BMW", company_description="x", summary="s",
+                       question="is bmw a good investment",
+                       interpreted_question="Is BMW a good investment?")
+    assert question_was_rewritten(cosmetic) is False
+
+
+def test_question_rewrite_handles_missing_values():
+    assert question_was_rewritten(
+        Report(company="X", company_description="x", summary="s")
+    ) is False
+
 
 def test_crosscheck_refuses_to_claim_consistent_without_financial_data():
     # The BMW case: news + risk arrived but NO financial metrics. Finding no

@@ -21,6 +21,7 @@ from investpanel.utils.report_analysis import (
     evidence_quality,
     missing_evidence_rows,
     peer_comparison_note,
+    question_was_rewritten,
 )
 from investpanel.utils.report_format import format_metric_label, format_metric_value
 
@@ -36,6 +37,9 @@ def report_to_markdown(report: Report) -> str:
     lines.append("")
     lines.append(f"- **Company:** {report.company}")
     lines.append(f"- **Ticker:** {report.ticker or 'Unavailable'}")
+    if question_was_rewritten(report):
+        lines.append(f'- **Question asked:** "{report.question}"')
+        lines.append(f'- **Interpreted as:** "{report.interpreted_question}"')
     freshness = data_freshness(report)
     for label, value in freshness.items():
         lines.append(f"- **{label}:** {value}")

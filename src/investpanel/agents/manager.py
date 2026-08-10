@@ -24,12 +24,20 @@ _NAME_NOISE = {
     "holding", "class", "&",
 }
 
-PARSE_PROMPT = """A user asked this investment question. Identify the subject company.
+PARSE_PROMPT = """A user asked this investment question. It may contain typos, missing
+words, or broken grammar — read past those to what they meant.
+
 Return ONLY JSON:
+  "clarified_question": the same question rewritten as clear English. Fix spelling and
+      grammar ONLY. Keep the user's original meaning and scope exactly — never switch to
+      a different company, never add a topic they didn't ask about, never answer it.
   "company": the company name,
   "ticker": its stock ticker in capitals (best guess if not stated),
   "time_window": the time frame implied, else "last 12 months",
   "priority_focus": the specific concern the question emphasises, else null
+
+Example: "bmw profit is how and is worth to invest it"
+  -> "How is BMW's profit, and is it worth investing in?"
 
 QUESTION: {question}
 """
@@ -139,6 +147,9 @@ class ManagerAgent(BaseAgent):
         scope = ResearchScope(
             company=company,
             ticker=ticker,
+            # Fall back to what the user typed if the model didn't return a rewrite —
+            # a missing correction must never lose the original question.
+            clarified_question=(parsed.get("clarified_question") or "").strip() or question,
             competitors=self._find_competitors(company),
             time_window=parsed.get("time_window") or "last 12 months",
             priority_focus=parsed.get("priority_focus"),

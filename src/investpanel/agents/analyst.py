@@ -321,11 +321,16 @@ class AnalystAgent(BaseAgent):
         peer_comparison: dict[str, dict[str, float]],
         followup_targets_executed: list[str] | None = None,
         ticker: str | None = None,
+        question: str | None = None,
+        interpreted_question: str | None = None,
+        price_history: list[float] | None = None,
     ) -> Report:
         """Assemble the final Report. The disclaimer is added by the model itself."""
         report = Report(
             company=company,
             ticker=ticker,
+            question=question,
+            interpreted_question=interpreted_question,
             company_description=company_description or "Description unavailable.",
             summary=self._summary(company, financial, news, risk, contradictions),
             checklist_answers=build_checklist_answers(financial, news, risk),
@@ -333,6 +338,7 @@ class AnalystAgent(BaseAgent):
             financial_findings=financial,
             news_findings=news,
             risk_findings=risk,
+            price_history=price_history or [],
             contradictions_found=contradictions,
             contradictions_resolved=contradictions_resolved,
             potential_tensions=detect_potential_tensions(financial, news, risk),

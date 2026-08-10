@@ -33,7 +33,9 @@ from investpanel.utils.report_analysis import (
     data_freshness,
     evidence_quality,
     missing_evidence_rows,
+    peer_chart_data,
     peer_comparison_note,
+    question_was_rewritten,
 )
 from investpanel.utils.report_export import report_to_markdown
 from investpanel.utils.report_format import format_metric_label, format_metric_value
@@ -56,6 +58,9 @@ def _render_report(report) -> None:
     # --- Company header + research metadata -------------------------------------
     header = report.company + (f" ({report.ticker})" if report.ticker else "")
     st.header(header)
+    # Show how a messy question was read, so a misreading is visible, not silent.
+    if question_was_rewritten(report):
+        st.caption(f'Interpreted your question as: *"{report.interpreted_question}"*')
     freshness = data_freshness(report)
     st.caption(
         f"Researched {freshness['Research date']} · Financial data: {freshness['Financial data period']} "
@@ -125,6 +130,12 @@ def _render_report(report) -> None:
     else:
         st.write("Insufficient evidence — no price history was available.")
 
+    # The price series the risk numbers were computed from — shown so the reader can
+    # see the volatility and drawdown rather than just being told the figures.
+    if report.price_history:
+        st.caption(f"Closing price, last {len(report.price_history)} trading days")
+        st.line_chart(report.price_history, height=220)
+
     # --- News analysis -----------------------------------------------------------------
     st.subheader("News Analysis")
     st.caption(f"{len(report.news_findings)} article(s) reviewed · coverage window: "
@@ -154,6 +165,13 @@ def _render_report(report) -> None:
         )
         if note:
             st.caption(note)
+        # One small bar chart per comparable metric, so "behind its peers" is visible
+        # at a glance instead of buried in a row of numbers.
+        charts = peer_chart_data(report.peer_comparison)
+        if charts:
+            for col, (label, values) in zip(st.columns(len(charts)), charts.items(), strict=True):
+                col.caption(label)
+                col.bar_chart(values, height=200)
     else:
         st.warning(f"**Peer comparison unavailable** — {note}")
 

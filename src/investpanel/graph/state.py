@@ -24,6 +24,8 @@ class PanelState(TypedDict, total=False):
     financial_findings: list[FinancialFinding]
     news_findings: list[NewsFinding]
     risk_findings: list[RiskFinding]
+    # The closing prices behind the risk numbers, kept so the report can chart them.
+    price_history: list[float]
     peer_comparison: dict[str, dict[str, float]]
 
     # The contradictions from the most recent analyst pass.

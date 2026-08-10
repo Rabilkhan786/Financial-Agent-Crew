@@ -17,6 +17,7 @@ from investpanel.utils.report_analysis import (
     build_human_checklist,
     data_freshness,
     evidence_quality,
+    question_was_rewritten,
 )
 
 # Force UTF-8 console output so special characters in headlines/summaries don't
@@ -28,6 +29,9 @@ if hasattr(sys.stdout, "reconfigure"):
 def print_report(report: Report) -> None:
     header = report.company + (f" ({report.ticker})" if report.ticker else "")
     print(f"\n{'=' * 70}\n  {header}\n{'=' * 70}\n")
+
+    if question_was_rewritten(report):
+        print(f'Interpreted your question as: "{report.interpreted_question}"\n')
 
     freshness = data_freshness(report)
     for label, value in freshness.items():

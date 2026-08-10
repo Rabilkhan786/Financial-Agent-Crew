@@ -32,6 +32,12 @@ class Report(BaseModel):
     company_description: str  # answers Q1, set once by the Manager
     summary: str
 
+    # What the user typed, and how the panel read it after fixing typos/grammar.
+    # Both are kept so the report can show the interpretation — if the rewrite
+    # misread the question, that's visible instead of silently changing the ask.
+    question: str | None = None
+    interpreted_question: str | None = None
+
     # Keys "q2".."q10": each a short answer + confidence, or "insufficient
     # evidence". This dict is what docs/evaluation.md reports completeness on.
     checklist_answers: dict[str, str] = Field(default_factory=dict)
@@ -42,6 +48,9 @@ class Report(BaseModel):
     financial_findings: list[FinancialFinding] = Field(default_factory=list)
     news_findings: list[NewsFinding] = Field(default_factory=list)
     risk_findings: list[RiskFinding] = Field(default_factory=list)
+    # Closing prices behind the risk numbers, so the app can chart them. Display
+    # only — every risk figure is still computed by the Risk agent, not from here.
+    price_history: list[float] = Field(default_factory=list)
 
     contradictions_found: list[Contradiction] = Field(default_factory=list)
     contradictions_resolved: int = 0

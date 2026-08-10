@@ -63,3 +63,12 @@ class RiskAgent(BaseAgent):
         findings = compute_risk_findings(prices, source)
         self.trace({"ticker": ticker.upper(), "findings": [f.model_dump(mode="json") for f in findings]})
         return findings
+
+    def price_series(self, ticker: str) -> list[float]:
+        """The closing prices behind the risk numbers, for the report's price chart.
+
+        Costs nothing extra: the Alpha Vantage response is already in the disk cache
+        from ``analyze``, so this is a cache hit rather than a second API call.
+        """
+        data = alphavantage_client.get_daily_prices(ticker)
+        return alphavantage_client.closing_prices(data)

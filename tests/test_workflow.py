@@ -33,6 +33,9 @@ class FakeSpecialist:
     def peer_metric_table(self, tickers):
         return {}
 
+    def price_series(self, ticker):
+        return [100.0, 101.0, 99.0]
+
 
 class FailingSpecialist(FakeSpecialist):
     def analyze(self, *args, **kwargs):
