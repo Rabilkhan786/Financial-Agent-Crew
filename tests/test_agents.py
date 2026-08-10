@@ -117,6 +117,14 @@ def test_compute_risk_findings():
     assert all(f.computed_from for f in findings)
 
 
+def test_compute_risk_findings_rejects_a_stale_price_series():
+    # A thinly-traded listing (e.g. the BMWYY ADR) returns the same close every day.
+    # Reporting "0% volatility" from that would look authoritative but mean nothing,
+    # so we return no findings and let the report say "insufficient evidence".
+    assert compute_risk_findings([29.2] * 100, source="AV test") == []
+    assert compute_risk_findings([10.0, 10.0], source="AV test") == []
+
+
 def test_risk_agent_uses_client(monkeypatch):
     fake_data = {
         "Time Series (Daily)": {

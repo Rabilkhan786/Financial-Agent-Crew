@@ -99,6 +99,11 @@ HEALTHY_PEG_MAX = 1.5              # valuation reasonable vs growth (PEG-like)
 # --- Risk thresholds ---------------------------------------------------------
 # Annualized volatility above this is flagged as "elevated" by the Risk agent.
 HIGH_VOLATILITY_THRESHOLD = 0.40
+# A price series needs at least this many DIFFERENT closing prices to say anything
+# about risk. Thinly-traded listings (e.g. some OTC ADRs) come back as the same
+# stale price repeated, which would compute to a meaningless "0% volatility" —
+# we report insufficient evidence instead of a number that looks real but isn't.
+MIN_DISTINCT_PRICES = 3
 # Max drawdown deeper than this (as a positive fraction, e.g. 0.25 = -25%) is
 # flagged as a notable historical downside in the report's risk summary.
 CONCERNING_DRAWDOWN_THRESHOLD = 0.25

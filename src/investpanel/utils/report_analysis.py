@@ -291,7 +291,10 @@ _RISK_METRICS = {"annualized_volatility", "max_drawdown"}
 # the "Missing Evidence" section can say more than just "insufficient evidence".
 MISSING_EVIDENCE_REASONS = {
     "financial": "Missing financial metric — the data provider (FMP) did not return this figure.",
-    "risk": "Insufficient price history — not enough daily prices were available to compute this.",
+    "risk": (
+        "No usable price history — either too few daily prices were available, or the "
+        "series showed no variation (a stale or thinly-traded listing)."
+    ),
     "news": "Missing source — no fetched, sourced article covered this question.",
 }
 

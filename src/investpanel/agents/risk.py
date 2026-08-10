@@ -14,7 +14,16 @@ from investpanel.tools.volatility import annualized_volatility, max_drawdown
 
 
 def compute_risk_findings(prices: list[float], source: str) -> list[RiskFinding]:
-    """Compute the risk findings from a chronological price list. Pure function."""
+    """Compute the risk findings from a chronological price list. Pure function.
+
+    Returns no findings when the series has too little variation to measure.
+    Some thinly-traded listings return the same stale close every day; that would
+    compute to a confident-looking "0% volatility, 0% drawdown", which is worse
+    than saying nothing. Reporting insufficient evidence is the honest answer.
+    """
+    if len(set(prices)) < config.MIN_DISTINCT_PRICES:
+        return []
+
     vol = annualized_volatility(prices)
     drawdown = max_drawdown(prices)
     elevated = vol > config.HIGH_VOLATILITY_THRESHOLD

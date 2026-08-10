@@ -44,6 +44,37 @@ def get_company_profile(ticker: str) -> dict:
     return profile
 
 
+def _search(endpoint: str, query: str, limit: int) -> list[dict]:
+    """Shared lookup helper. Returns [] rather than raising — a failed search is
+    never fatal; the caller just keeps whatever ticker it already had."""
+    key = _require_key()
+    data = cache.cached_get_json(
+        f"{BASE_URL}/{endpoint}",
+        cache_key=f"fmp:{endpoint}:{query.lower()}:{limit}",
+        params={"query": query, "limit": limit, "apikey": key},
+    )
+    return data or []
+
+
+def search_symbol(query: str, limit: int = 10) -> list[dict]:
+    """Find listings whose TICKER matches the query (e.g. "BMW" -> BMWYY, BMW.DE).
+
+    Each result carries exchange and currency, which is how the Manager picks the
+    US-listed line — the one this project's data plan actually covers.
+    """
+    return _search("search-symbol", query, limit)
+
+
+def search_name(query: str, limit: int = 10) -> list[dict]:
+    """Find listings whose COMPANY NAME matches the query.
+
+    Needed alongside search_symbol because the two match different fields:
+    searching the legal name "Bayerische Motoren Werke" returns nothing from the
+    symbol endpoint, and searching "BMW" returns nothing useful from this one.
+    """
+    return _search("search-name", query, limit)
+
+
 def _get_statement(endpoint: str, ticker: str, limit: int) -> list[dict]:
     """Shared helper: fetch a financial statement list, newest period first.
 
