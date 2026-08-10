@@ -25,7 +25,7 @@ def _nf(headline, tag="risk"):
 
 
 def test_critic_finds_nothing_when_everything_agrees():
-    contradictions, tensions = CriticAgent().review(
+    contradictions, tensions, _ = CriticAgent().review(
         [_ff("revenue_growth", 10.0, True), _ff("profit_growth", 12.0, True)],
         [], [_rf("annualized_volatility", 0.15)],
     )
@@ -35,7 +35,7 @@ def test_critic_finds_nothing_when_everything_agrees():
 
 def test_critic_reports_a_real_contradiction():
     # Rich valuation while profit shrinks — a genuine numbers-vs-price conflict.
-    contradictions, _ = CriticAgent().review(
+    contradictions, _, _ = CriticAgent().review(
         [_ff("pe_ratio", 278.0, False), _ff("profit_growth", -46.8, False, "percent_yoy")],
         [], [],
     )
@@ -49,7 +49,7 @@ def test_critic_separates_a_tension_from_a_contradiction():
         _ff("revenue_growth", 19.2, True, "percent_yoy"),
         _ff("profit_growth", -3.4, False, "percent_yoy"),
     ]
-    contradictions, tensions = CriticAgent().review(financial, [], [])
+    contradictions, tensions, _ = CriticAgent().review(financial, [], [])
     assert contradictions == []          # must not overstate
     assert len(tensions) == 1            # but must not stay silent either
 
@@ -60,14 +60,14 @@ def test_critic_catches_cash_versus_profit_conflict():
         _ff("profit_growth", 25.0, True, "percent_yoy"),
         _ff("operating_cash_flow", -500.0, False, "currency"),
     ]
-    contradictions, _ = CriticAgent().review(financial, [], [])
+    contradictions, _, _ = CriticAgent().review(financial, [], [])
     assert any("earnings-quality" in c.description for c in contradictions)
 
 
 def test_critic_uses_peer_data_when_given_it():
     financial = [_ff("revenue_growth", 3.0, True, "percent_yoy")]
     peers = {"revenue_growth": {"TGT": 3.0, "P1": 40.0, "P2": 35.0}}
-    contradictions, _ = CriticAgent().review(financial, [], [], peer_comparison=peers,
+    contradictions, _, _ = CriticAgent().review(financial, [], [], peer_comparison=peers,
                                               target_ticker="TGT")
     assert any("behind its competitors" in c.description for c in contradictions)
 

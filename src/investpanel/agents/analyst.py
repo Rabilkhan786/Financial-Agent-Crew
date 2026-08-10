@@ -19,9 +19,11 @@ from investpanel import config
 from investpanel.agents.base import BaseAgent
 from investpanel.models.contradiction import Contradiction, Tension
 from investpanel.models.findings import FinancialFinding, NewsFinding, RiskFinding
+from investpanel.models.observation import Observation
 from investpanel.models.report import Report
 from investpanel.utils.logging import get_logger
 from investpanel.utils.numeric_guard import verify_summary
+from investpanel.utils.observations import collect_observations
 
 logger = get_logger(__name__)
 
@@ -332,6 +334,7 @@ class AnalystAgent(BaseAgent):
         routing_reason: str | None = None,
         skipped_agents: list[str] | None = None,
         tensions: list[Tension] | None = None,
+        additional_findings: list[Observation] | None = None,
     ) -> Report:
         """Assemble the final Report. The disclaimer is added by the model itself."""
         report = Report(
@@ -356,6 +359,11 @@ class AnalystAgent(BaseAgent):
             # no critic ran, so a focused test or older caller still gets tensions.
             potential_tensions=(
                 tensions if tensions is not None else detect_potential_tensions(financial, news, risk)
+            ),
+            # Same pattern: use what the Critic surfaced, but still work standalone.
+            additional_findings=(
+                additional_findings if additional_findings is not None
+                else collect_observations(financial, news, risk)
             ),
             followup_targets_executed=followup_targets_executed or [],
         )

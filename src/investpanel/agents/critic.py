@@ -20,7 +20,9 @@ from investpanel.agents.analyst import detect_contradictions, detect_potential_t
 from investpanel.agents.base import BaseAgent
 from investpanel.models.contradiction import Contradiction, Tension
 from investpanel.models.findings import FinancialFinding, NewsFinding, RiskFinding
+from investpanel.models.observation import Observation
 from investpanel.utils.logging import get_logger
+from investpanel.utils.observations import collect_observations
 
 logger = get_logger(__name__)
 
@@ -37,26 +39,33 @@ class CriticAgent(BaseAgent):
         risk: list[RiskFinding],
         peer_comparison: dict[str, dict[str, float]] | None = None,
         target_ticker: str | None = None,
-    ) -> tuple[list[Contradiction], list[Tension]]:
-        """Return (confirmed contradictions, potential tensions).
+    ) -> tuple[list[Contradiction], list[Tension], list[Observation]]:
+        """Return (contradictions, tensions, additional findings).
 
-        The two are kept apart on purpose: a contradiction is a genuine
-        disagreement that earns a follow-up round, while a tension is only worth
-        a reader's attention. Collapsing them would either spam the follow-up loop
-        or bury real conflicts.
+        The three are kept apart on purpose. A contradiction is a genuine
+        disagreement that earns a follow-up round; a tension is only worth a
+        reader's attention; an additional finding is something material that no
+        checklist question asked about. Collapsing them would either spam the
+        follow-up loop or bury the real conflicts.
         """
         contradictions = detect_contradictions(
             financial, news, risk, peer_comparison, target_ticker
         )
         tensions = detect_potential_tensions(financial, news, risk)
+        # CHANGE 5: the checklist is a floor, not a ceiling — anything materially
+        # relevant gets surfaced even when no question covers it.
+        observations = collect_observations(financial, news, risk)
 
         logger.info(
-            "Critic: %d contradiction(s), %d tension(s)", len(contradictions), len(tensions)
+            "Critic: %d contradiction(s), %d tension(s), %d additional finding(s)",
+            len(contradictions), len(tensions), len(observations),
         )
         self.trace({
             "num_contradictions": len(contradictions),
             "num_tensions": len(tensions),
+            "num_observations": len(observations),
             "contradictions": [c.model_dump(mode="json") for c in contradictions],
             "tensions": [t.model_dump(mode="json") for t in tensions],
+            "observations": [o.model_dump(mode="json") for o in observations],
         })
-        return contradictions, tensions
+        return contradictions, tensions, observations

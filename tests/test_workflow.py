@@ -57,7 +57,7 @@ class FakeCritic:
     def review(self, financial, news, risk, peer_comparison=None, target_ticker=None):
         self.review_calls += 1
         contradictions = self._sequence.pop(0) if self._sequence else []
-        return contradictions, []
+        return contradictions, [], []
 
 
 class FakeAnalyst:

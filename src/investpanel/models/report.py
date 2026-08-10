@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from investpanel.models.contradiction import Contradiction, Tension
 from investpanel.models.findings import FinancialFinding, NewsFinding, RiskFinding
+from investpanel.models.observation import Observation
 
 # The exact, required disclaimer text. Defined once, here.
 DISCLAIMER_TEXT = (
@@ -65,6 +66,11 @@ class Report(BaseModel):
     # Softer signals — worth a reader's attention but NOT confirmed contradictions
     # (see models/contradiction.py). Never drives the follow-up loop.
     potential_tensions: list[Tension] = Field(default_factory=list)
+
+    # Materially relevant findings that no checklist question asked about. The 10
+    # questions are the minimum every report covers, not a limit on what the panel
+    # is allowed to notice.
+    additional_findings: list[Observation] = Field(default_factory=list)
 
     # Which specialists were actually re-queried by a follow-up round, in the
     # order it happened. Lets the report say "follow-up executed" truthfully for

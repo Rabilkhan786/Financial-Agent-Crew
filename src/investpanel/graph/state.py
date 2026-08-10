@@ -12,6 +12,7 @@ from typing import Annotated, TypedDict
 
 from investpanel.models.contradiction import Contradiction, Tension
 from investpanel.models.findings import FinancialFinding, NewsFinding, RiskFinding
+from investpanel.models.observation import Observation
 from investpanel.models.query_plan import QueryPlan
 from investpanel.models.report import Report
 from investpanel.models.scope import ResearchScope
@@ -37,6 +38,8 @@ class PanelState(TypedDict, total=False):
     # Softer signals the Critic noticed — surfaced in the report, but they never
     # trigger a follow-up round.
     tensions: list[Tension]
+    # Material findings outside the fixed checklist (CHANGE 5).
+    observations: list[Observation]
     # Every contradiction seen across all passes (add-reducer: nodes append).
     all_contradictions: Annotated[list[Contradiction], operator.add]
     # The single contradiction currently being followed up on.

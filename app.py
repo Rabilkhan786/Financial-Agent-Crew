@@ -204,6 +204,22 @@ def _render_report(report) -> None:
                 st.markdown(f"**Follow-up question asked:** {c.follow_up_question}")
                 st.markdown(f"**Status:** {status}")
 
+    # --- Additional findings beyond the checklist --------------------------------------------
+    if report.additional_findings:
+        st.subheader("Additional Findings")
+        st.caption("Beyond the 10-question checklist — materially relevant items no "
+                   "checklist question asked about.")
+        for obs in report.additional_findings:
+            line = f"**{obs.title}** — {obs.detail}"
+            if obs.severity == "concern":
+                st.warning(line)
+            elif obs.severity == "watch":
+                st.info(line)
+            else:
+                st.markdown(f"- {line}")
+            if obs.evidence:
+                st.caption(f"Evidence: {', '.join(obs.evidence)} · source: {obs.source}")
+
     # --- Missing evidence ------------------------------------------------------------------
     missing = missing_evidence_rows(report)
     with st.expander(f"Missing Evidence ({len(missing)})"):

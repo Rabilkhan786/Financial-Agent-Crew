@@ -159,6 +159,20 @@ def report_to_markdown(report: Report) -> str:
             lines.append(f"  **Status:** {status}")
         lines.append("")
 
+    # --- Additional findings (beyond the fixed checklist) -------------------------------
+    if report.additional_findings:
+        lines.append("## Additional Findings (beyond the 10-question checklist)")
+        lines.append("")
+        lines.append("_The checklist is the minimum every report covers. These are "
+                     "materially relevant items no checklist question asked about._")
+        lines.append("")
+        for obs in report.additional_findings:
+            lines.append(f"- **[{obs.severity.upper()}] {obs.title}** ({obs.source})  ")
+            lines.append(f"  {obs.detail}  ")
+            if obs.evidence:
+                lines.append(f"  *Evidence:* {', '.join(obs.evidence)}")
+        lines.append("")
+
     # --- Missing evidence --------------------------------------------------------------
     missing = missing_evidence_rows(report)
     lines.append("## Missing Evidence")

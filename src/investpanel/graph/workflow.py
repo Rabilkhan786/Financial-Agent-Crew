@@ -152,8 +152,8 @@ def build_workflow(panel: Panel):
         if panel.critic is None:
             # No critic supplied (older callers / focused tests): skip the challenge
             # rather than crash, and record that nothing was cross-examined.
-            return {"contradictions": [], "tensions": [], "follow_up": None}
-        contradictions, tensions = panel.critic.review(
+            return {"contradictions": [], "tensions": [], "observations": [], "follow_up": None}
+        contradictions, tensions, observations = panel.critic.review(
             state.get("financial_findings", []),
             state.get("news_findings", []),
             state.get("risk_findings", []),
@@ -163,6 +163,7 @@ def build_workflow(panel: Panel):
         return {
             "contradictions": contradictions,
             "tensions": tensions,
+            "observations": observations,
             "follow_up": contradictions[0] if contradictions else None,
             "all_contradictions": contradictions,  # add-reducer accumulates these
         }
@@ -188,6 +189,7 @@ def build_workflow(panel: Panel):
             # The Critic's findings are handed to the Analyst as input it must
             # address, not something it can quietly reconcile away.
             tensions=state.get("tensions", []),
+            additional_findings=state.get("observations", []),
             peer_comparison=state.get("peer_comparison", {}),
             followup_targets_executed=state.get("resolved_targets", []),
         )
