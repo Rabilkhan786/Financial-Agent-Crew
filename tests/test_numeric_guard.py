@@ -129,3 +129,38 @@ def test_analyst_keeps_a_summary_that_only_uses_real_numbers():
                                    period="2025", source="FMP", interpretation="up", healthy=True)]
     summary = AnalystAgent(llm=HonestLLM())._summary("Acme", financial, [], [], [])
     assert "6.4%" in summary
+
+
+def test_a_number_quoted_from_a_sourced_article_is_allowed():
+    # Regression from a live Tesla news-only run: the guard rejected "475", a figure
+    # stated in a fetched article. It has a source URL, so repeating it is legitimate —
+    # the guard exists to stop invention, not sourced quotation.
+    from investpanel.agents.analyst import AnalystAgent
+    from investpanel.models.findings import NewsFinding
+
+    class QuotingLLM:
+        def invoke(self, prompt):
+            class R:
+                content = "Analysts set a price target of 475 following the announcement."
+            return R()
+
+    news = [NewsFinding(headline="Analyst raises target to 475", summary="A target of 475 was set.",
+                         source_url="https://e.com", published_date="2026-08-01", relevance="high")]
+    summary = AnalystAgent(llm=QuotingLLM())._summary("Tesla", [], news, [], [])
+    assert "475" in summary
+
+
+def test_fallback_summary_mentions_only_what_ran():
+    # "0/0 financial metrics healthy" on a news-only run reads like a failure.
+    from investpanel.agents.analyst import AnalystAgent
+    from investpanel.models.findings import NewsFinding
+
+    class BrokenLLM:
+        def invoke(self, prompt):
+            raise RuntimeError("rate limited")
+
+    news = [NewsFinding(headline="h", summary="s", source_url="https://e.com",
+                         published_date="2026-08-01", relevance="high")]
+    summary = AnalystAgent(llm=BrokenLLM())._summary("Tesla", [], news, [], [])
+    assert "financial metrics" not in summary
+    assert "1 news items reviewed" in summary

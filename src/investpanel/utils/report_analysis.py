@@ -197,6 +197,8 @@ def evidence_quality(report: Report, target_ticker: str | None = None) -> dict[s
     ]
     for source in skipped & set(per_source):
         per_source[source] = NOT_REQUESTED
+    if not report.peers_requested:
+        per_source["Peer comparison"] = NOT_REQUESTED
     per_source["Overall"] = (
         min(considered, key=lambda label: _QUALITY_RANK[label]) if considered else "Insufficient"
     )

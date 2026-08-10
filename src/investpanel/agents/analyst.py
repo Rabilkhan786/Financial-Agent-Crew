@@ -391,11 +391,18 @@ class AnalystAgent(BaseAgent):
         built only from counts — a run must never fail just because the prose
         summary couldn't be written.
         """
-        fallback = (
-            f"{company}: {sum(1 for f in financial if f.healthy)}/{len(financial)} financial "
-            f"metrics healthy, {len(news)} news items reviewed, "
-            f"{len(contradictions)} contradiction(s) found."
-        )
+        # Only mention what actually ran. "0/0 financial metrics healthy" on a
+        # news-only question is noise that reads like something went wrong.
+        parts = []
+        if financial:
+            parts.append(f"{sum(1 for f in financial if f.healthy)}/{len(financial)} "
+                         "financial metrics healthy")
+        if news:
+            parts.append(f"{len(news)} news items reviewed")
+        if risk:
+            parts.append(f"{len(risk)} risk measures computed")
+        parts.append(f"{len(contradictions)} contradiction(s) found")
+        fallback = f"{company}: " + ", ".join(parts) + "."
         # The Critic's output is passed in as something the takeaway must ADDRESS.
         # Left out, an LLM naturally writes a tidy story and the conflict disappears —
         # which is exactly the failure the Critic step exists to prevent.
@@ -437,7 +444,7 @@ class AnalystAgent(BaseAgent):
         # every figure in the prose must trace back to a number Python computed. If
         # the model invented one, we drop the prose entirely rather than publish a
         # fabricated financial figure.
-        allowed = _allowed_numbers(financial, risk, contradictions, tensions or [])
+        allowed = _allowed_numbers(financial, risk, contradictions, tensions or [], news)
         clean, offenders = verify_summary(text, allowed)
         if not clean:
             logger.warning(
@@ -473,7 +480,7 @@ def _brief_lines(descriptions) -> str:
     return "\n".join(f"- {d}" for d in descriptions) or "- none"
 
 
-def _allowed_numbers(financial, risk, contradictions=(), tensions=()) -> list[float]:
+def _allowed_numbers(financial, risk, contradictions=(), tensions=(), news=()) -> list[float]:
     """Every number the summary may legitimately quote.
 
     Not just the metric values. The findings' own sentences carry real numbers
@@ -495,6 +502,12 @@ def _allowed_numbers(financial, risk, contradictions=(), tensions=()) -> list[fl
             str(getattr(item, field, "") or "")
             for field in ("description", "reason", "follow_up_question")
         )
+        values.extend(extract_numbers(text))
+    # A figure quoted from a news finding is sourced — the article said it, and the
+    # finding carries the URL. The guard exists to stop the model INVENTING numbers,
+    # not to stop it repeating one that traces back to a real source.
+    for item in news:
+        text = f"{getattr(item, 'headline', '')} {getattr(item, 'summary', '')}"
         values.extend(extract_numbers(text))
     return values
 
