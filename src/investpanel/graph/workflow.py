@@ -1,12 +1,14 @@
 """Wire the agents into the LangGraph panel.
 
-Flow: manager sets scope -> Financial, News, and Risk run in parallel -> the
-Analyst cross-checks -> if it found a contradiction (and rounds remain) the graph
-loops back to ONE specialist and then to the Analyst again -> finally the report.
+Flow: the Query Analyzer classifies the question -> the Manager sets scope and
+dispatches ONLY the specialists that question needs -> they run in parallel -> the
+Critic cross-examines their findings -> if it found a contradiction (and rounds
+remain) the graph loops back to ONE specialist and through the Critic again ->
+finally the Analyst synthesizes the report, addressing what the Critic raised.
 
-The five agents are held in a small ``Panel`` and passed in, so the whole graph
-can be built and tested with fake agents (no API keys). ``build_panel`` makes the
-real ones; tests make their own.
+The agents are held in a small ``Panel`` and passed in, so the whole graph can be
+built and tested with fake agents (no API keys). ``build_panel`` makes the real
+ones; tests make their own.
 """
 
 from dataclasses import dataclass
@@ -15,12 +17,13 @@ from langgraph.graph import END, START, StateGraph
 
 from investpanel import config
 from investpanel.agents.analyst import AnalystAgent
+from investpanel.agents.critic import CriticAgent
 from investpanel.agents.financial import FinancialAgent
 from investpanel.agents.manager import ManagerAgent
 from investpanel.agents.news import NewsAgent
 from investpanel.agents.query_analyzer import QueryAnalyzerAgent
 from investpanel.agents.risk import RiskAgent
-from investpanel.graph.routing import route_after_analyst, route_after_manager
+from investpanel.graph.routing import route_after_critic, route_after_manager
 from investpanel.graph.state import PanelState
 from investpanel.models.query_plan import QueryPlan
 from investpanel.utils.logging import get_logger
@@ -39,6 +42,8 @@ class Panel:
     analyst: object
     # Runs before the manager to decide which specialists this question needs.
     query_analyzer: object = None
+    # Cross-examines the specialists between their work and the analyst's synthesis.
+    critic: object = None
 
 
 def build_panel() -> Panel:
@@ -60,6 +65,10 @@ def build_panel() -> Panel:
         risk=RiskAgent(),
         analyst=analyst,
         query_analyzer=QueryAnalyzerAgent(),
+        # The critic gets the stronger model too when one is configured — judging
+        # whether findings genuinely conflict is the reasoning-heavy step.
+        critic=CriticAgent(llm=get_llm(model=config.ANALYST_MODEL)) if config.ANALYST_MODEL
+        else CriticAgent(),
     )
 
 
@@ -137,9 +146,14 @@ def build_workflow(panel: Panel):
             update["resolved_targets"] = ["risk"]
         return update
 
-    def analyst_node(state: PanelState) -> dict:
+    def critic_node(state: PanelState) -> dict:
+        """Challenge the specialists BEFORE the analyst gets to tell a tidy story."""
         scope = state.get("scope")
-        contradictions = panel.analyst.cross_check(
+        if panel.critic is None:
+            # No critic supplied (older callers / focused tests): skip the challenge
+            # rather than crash, and record that nothing was cross-examined.
+            return {"contradictions": [], "tensions": [], "follow_up": None}
+        contradictions, tensions = panel.critic.review(
             state.get("financial_findings", []),
             state.get("news_findings", []),
             state.get("risk_findings", []),
@@ -148,11 +162,12 @@ def build_workflow(panel: Panel):
         )
         return {
             "contradictions": contradictions,
+            "tensions": tensions,
             "follow_up": contradictions[0] if contradictions else None,
             "all_contradictions": contradictions,  # add-reducer accumulates these
         }
 
-    def report_node(state: PanelState) -> dict:
+    def analyst_node(state: PanelState) -> dict:
         scope = state["scope"]
         plan = state.get("query_plan") or QueryPlan()
         report = panel.analyst.write_report(
@@ -170,6 +185,9 @@ def build_workflow(panel: Panel):
             price_history=state.get("price_history", []),
             contradictions=_dedup(state.get("all_contradictions", [])),
             contradictions_resolved=state.get("rounds", 0),
+            # The Critic's findings are handed to the Analyst as input it must
+            # address, not something it can quietly reconcile away.
+            tensions=state.get("tensions", []),
             peer_comparison=state.get("peer_comparison", {}),
             followup_targets_executed=state.get("resolved_targets", []),
         )
@@ -188,8 +206,8 @@ def build_workflow(panel: Panel):
     builder.add_node("financial", financial_node)
     builder.add_node("news", news_node)
     builder.add_node("risk", risk_node)
+    builder.add_node("critic", critic_node)
     builder.add_node("analyst", analyst_node)
-    builder.add_node("report", report_node)
 
     # Classify the question first, so the Manager knows who to wake up.
     builder.add_edge(START, "query_analyzer")
@@ -200,19 +218,21 @@ def build_workflow(panel: Panel):
     builder.add_conditional_edges(
         "manager",
         route_after_manager,
+        {"financial": "financial", "news": "news", "risk": "risk", "critic": "critic"},
+    )
+    # Whoever ran fans back in to the CRITIC, not straight to the analyst — every
+    # set of findings gets challenged before anyone synthesizes them.
+    builder.add_edge("financial", "critic")
+    builder.add_edge("news", "critic")
+    builder.add_edge("risk", "critic")
+    # The critic decides: send one specialist back for another look, or hand its
+    # findings to the analyst to write up.
+    builder.add_conditional_edges(
+        "critic",
+        route_after_critic,
         {"financial": "financial", "news": "news", "risk": "risk", "analyst": "analyst"},
     )
-    # Whoever ran fans back in to the analyst.
-    builder.add_edge("financial", "analyst")
-    builder.add_edge("news", "analyst")
-    builder.add_edge("risk", "analyst")
-    # After the analyst: loop to one specialist, or finish with the report.
-    builder.add_conditional_edges(
-        "analyst",
-        route_after_analyst,
-        {"financial": "financial", "news": "news", "risk": "risk", "report": "report"},
-    )
-    builder.add_edge("report", END)
+    builder.add_edge("analyst", END)
 
     return builder.compile()
 

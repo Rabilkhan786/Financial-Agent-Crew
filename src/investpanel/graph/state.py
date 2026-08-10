@@ -10,7 +10,7 @@ one overwrite another — needed because several nodes may append to them.
 import operator
 from typing import Annotated, TypedDict
 
-from investpanel.models.contradiction import Contradiction
+from investpanel.models.contradiction import Contradiction, Tension
 from investpanel.models.findings import FinancialFinding, NewsFinding, RiskFinding
 from investpanel.models.query_plan import QueryPlan
 from investpanel.models.report import Report
@@ -32,8 +32,11 @@ class PanelState(TypedDict, total=False):
     price_history: list[float]
     peer_comparison: dict[str, dict[str, float]]
 
-    # The contradictions from the most recent analyst pass.
+    # The contradictions from the most recent Critic pass.
     contradictions: list[Contradiction]
+    # Softer signals the Critic noticed — surfaced in the report, but they never
+    # trigger a follow-up round.
+    tensions: list[Tension]
     # Every contradiction seen across all passes (add-reducer: nodes append).
     all_contradictions: Annotated[list[Contradiction], operator.add]
     # The single contradiction currently being followed up on.

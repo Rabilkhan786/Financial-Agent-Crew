@@ -42,18 +42,29 @@ class FailingSpecialist(FakeSpecialist):
         raise RuntimeError("boom")
 
 
-class FakeAnalyst:
-    """Returns a scripted list of contradictions per cross_check call."""
+class FakeCritic:
+    """Returns a scripted list of contradictions per review call.
+
+    The Critic — not the Analyst — drives the follow-up loop, so this is what the
+    loop tests script.
+    """
 
     def __init__(self, sequence):
         # sequence is a list of "contradiction lists", one per expected pass.
         self._sequence = list(sequence)
-        self.cross_check_calls = 0
-        self.last_write_args = None
+        self.review_calls = 0
 
-    def cross_check(self, financial, news, risk, peer_comparison=None, target_ticker=None):
-        self.cross_check_calls += 1
-        return self._sequence.pop(0) if self._sequence else []
+    def review(self, financial, news, risk, peer_comparison=None, target_ticker=None):
+        self.review_calls += 1
+        contradictions = self._sequence.pop(0) if self._sequence else []
+        return contradictions, []
+
+
+class FakeAnalyst:
+    """Only synthesizes now — the cross-check moved to the Critic."""
+
+    def __init__(self):
+        self.last_write_args = None
 
     def write_report(self, **kwargs):
         self.last_write_args = kwargs
@@ -85,31 +96,32 @@ class FakeQueryAnalyzer:
         return self._plan
 
 
-def _panel(analyst, failing=None, query_analyzer=None):
+def _panel(critic=None, failing=None, query_analyzer=None, analyst=None):
     return Panel(
         manager=FakeManager(),
         financial=FailingSpecialist() if failing == "financial" else FakeSpecialist(),
         news=FakeSpecialist(),
         risk=FakeSpecialist(),
-        analyst=analyst,
+        analyst=analyst or FakeAnalyst(),
         query_analyzer=query_analyzer,
+        critic=critic if critic is not None else FakeCritic(sequence=[[]]),
     )
 
 
 def test_clean_run_writes_report_without_looping():
-    analyst = FakeAnalyst(sequence=[[]])  # no contradictions on the first pass
-    graph = build_workflow(_panel(analyst))
+    critic = FakeCritic(sequence=[[]])  # no contradictions on the first pass
+    graph = build_workflow(_panel(critic))
     state = graph.invoke({"question": "Is Acme a good investment?"})
 
     assert isinstance(state["report"], Report)
     assert state["report"].contradictions_resolved == 0
-    assert analyst.cross_check_calls == 1  # analyst ran once, no loop
+    assert critic.review_calls == 1  # critic ran once, no loop
 
 
 def test_caught_contradiction_fires_one_followup():
     # Pass 1 finds a contradiction; pass 2 (after re-asking News) finds none.
-    analyst = FakeAnalyst(sequence=[[_news_contradiction()], []])
-    panel = _panel(analyst)
+    critic = FakeCritic(sequence=[[_news_contradiction()], []])
+    panel = _panel(critic)
     graph = build_workflow(panel)
     state = graph.invoke({"question": "Is Acme a good investment?"})
 
@@ -117,29 +129,28 @@ def test_caught_contradiction_fires_one_followup():
     assert report.contradictions_resolved == 1  # exactly one follow-up round ran
     assert len(report.contradictions_found) == 1
     assert report.contradictions_found[0].follow_up_target == "news"
-    # News ran twice (initial fan-out + the one follow-up); analyst ran twice.
+    # News ran twice (initial fan-out + the one follow-up); the critic reviewed twice.
     assert panel.news.calls == 2
-    assert analyst.cross_check_calls == 2
+    assert critic.review_calls == 2
 
 
 def test_loop_stops_at_round_limit_when_contradiction_persists():
-    # Analyst always finds a contradiction; the loop must still terminate.
+    # The critic always finds a contradiction; the loop must still terminate.
     always = [[_news_contradiction()] for _ in range(10)]
-    analyst = FakeAnalyst(sequence=always)
-    graph = build_workflow(_panel(analyst))
+    critic = FakeCritic(sequence=always)
+    graph = build_workflow(_panel(critic))
     state = graph.invoke({"question": "Is Acme a good investment?"})
 
     assert state["report"].contradictions_resolved == config.MAX_FOLLOWUP_ROUNDS
-    # Analyst runs once initially, then once after each follow-up round.
-    assert analyst.cross_check_calls == config.MAX_FOLLOWUP_ROUNDS + 1
+    # Critic runs once initially, then once after each follow-up round.
+    assert critic.review_calls == config.MAX_FOLLOWUP_ROUNDS + 1
 
 
 def test_risk_only_question_does_not_run_financial_or_news():
     # CHANGE 1: the whole point — a risk question must not pay for FMP and Tavily.
     from investpanel.models.query_plan import QueryPlan
 
-    analyst = FakeAnalyst(sequence=[[]])
-    panel = _panel(analyst, query_analyzer=FakeQueryAnalyzer(QueryPlan.for_intent("risk_only")))
+    panel = _panel(query_analyzer=FakeQueryAnalyzer(QueryPlan.for_intent("risk_only")))
     graph = build_workflow(panel)
     state = graph.invoke({"question": "How volatile is Acme?"})
 
@@ -152,8 +163,7 @@ def test_risk_only_question_does_not_run_financial_or_news():
 def test_quick_fact_runs_financial_only():
     from investpanel.models.query_plan import QueryPlan
 
-    analyst = FakeAnalyst(sequence=[[]])
-    panel = _panel(analyst, query_analyzer=FakeQueryAnalyzer(QueryPlan.for_intent("quick_fact")))
+    panel = _panel(query_analyzer=FakeQueryAnalyzer(QueryPlan.for_intent("quick_fact")))
     build_workflow(panel).invoke({"question": "What is Acme's P/E?"})
 
     assert panel.financial.calls == 1
@@ -164,8 +174,7 @@ def test_quick_fact_runs_financial_only():
 def test_full_due_diligence_still_runs_all_three():
     from investpanel.models.query_plan import QueryPlan
 
-    analyst = FakeAnalyst(sequence=[[]])
-    panel = _panel(analyst, query_analyzer=FakeQueryAnalyzer(QueryPlan.for_intent("full_due_diligence")))
+    panel = _panel(query_analyzer=FakeQueryAnalyzer(QueryPlan.for_intent("full_due_diligence")))
     build_workflow(panel).invoke({"question": "Is Acme a good investment?"})
 
     assert panel.financial.calls == 1
@@ -174,8 +183,7 @@ def test_full_due_diligence_still_runs_all_three():
 
 
 def test_failing_specialist_degrades_gracefully():
-    analyst = FakeAnalyst(sequence=[[]])
-    graph = build_workflow(_panel(analyst, failing="financial"))
+    graph = build_workflow(_panel(failing="financial"))
     state = graph.invoke({"question": "Is Acme a good investment?"})
 
     # The run still finishes with a report, and the failure is recorded.

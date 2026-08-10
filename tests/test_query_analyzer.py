@@ -5,7 +5,7 @@ graph actually skipping the specialists a question doesn't need. All mocked.
 """
 
 from investpanel.agents.query_analyzer import QueryAnalyzerAgent
-from investpanel.graph.routing import route_after_analyst, route_after_manager
+from investpanel.graph.routing import route_after_critic, route_after_manager
 from investpanel.models.contradiction import Contradiction
 from investpanel.models.query_plan import QueryPlan
 
@@ -101,11 +101,12 @@ def test_route_after_manager_defaults_to_all_three():
 def test_route_after_manager_never_returns_an_empty_dispatch():
     # A plan wanting nobody must still move the graph forward, not stall it.
     plan = QueryPlan(needs_financial=False, needs_news=False, needs_risk=False)
-    assert route_after_manager({"query_plan": plan}) == ["analyst"]
+    assert route_after_manager({"query_plan": plan}) == ["critic"]
 
 
 def test_followup_cannot_wake_a_skipped_specialist():
-    # Analyst wants News, but this run deliberately skipped News -> go to report.
+    # The Critic wants News, but this run deliberately skipped News -> go straight
+    # to the Analyst instead of quietly undoing the routing decision.
     contradiction = Contradiction(
         between=("financial", "news"), description="d",
         follow_up_target="news", follow_up_question="q?",
@@ -115,7 +116,7 @@ def test_followup_cannot_wake_a_skipped_specialist():
         "rounds": 0,
         "query_plan": QueryPlan.for_intent("financial_health"),  # news not dispatched
     }
-    assert route_after_analyst(state) == "report"
+    assert route_after_critic(state) == "analyst"
 
 
 def test_followup_still_works_for_a_dispatched_specialist():
@@ -128,4 +129,4 @@ def test_followup_still_works_for_a_dispatched_specialist():
         "rounds": 0,
         "query_plan": QueryPlan.for_intent("full_due_diligence"),
     }
-    assert route_after_analyst(state) == "news"
+    assert route_after_critic(state) == "news"

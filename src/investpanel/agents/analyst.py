@@ -331,6 +331,7 @@ class AnalystAgent(BaseAgent):
         query_intent: str | None = None,
         routing_reason: str | None = None,
         skipped_agents: list[str] | None = None,
+        tensions: list[Tension] | None = None,
     ) -> Report:
         """Assemble the final Report. The disclaimer is added by the model itself."""
         report = Report(
@@ -342,7 +343,7 @@ class AnalystAgent(BaseAgent):
             routing_reason=routing_reason,
             skipped_agents=skipped_agents or [],
             company_description=company_description or "Description unavailable.",
-            summary=self._summary(company, financial, news, risk, contradictions),
+            summary=self._summary(company, financial, news, risk, contradictions, tensions or []),
             checklist_answers=build_checklist_answers(financial, news, risk),
             peer_comparison=peer_comparison,
             financial_findings=financial,
@@ -351,13 +352,17 @@ class AnalystAgent(BaseAgent):
             price_history=price_history or [],
             contradictions_found=contradictions,
             contradictions_resolved=contradictions_resolved,
-            potential_tensions=detect_potential_tensions(financial, news, risk),
+            # Use what the Critic raised. Only fall back to computing them here if
+            # no critic ran, so a focused test or older caller still gets tensions.
+            potential_tensions=(
+                tensions if tensions is not None else detect_potential_tensions(financial, news, risk)
+            ),
             followup_targets_executed=followup_targets_executed or [],
         )
         self.trace({"company": company, "report_summary": report.summary})
         return report
 
-    def _summary(self, company, financial, news, risk, contradictions) -> str:
+    def _summary(self, company, financial, news, risk, contradictions, tensions=None) -> str:
         """The report's short "Key Takeaway".
 
         Asks the LLM to synthesize the validated findings. If no LLM is reachable
@@ -370,14 +375,26 @@ class AnalystAgent(BaseAgent):
             f"metrics healthy, {len(news)} news items reviewed, "
             f"{len(contradictions)} contradiction(s) found."
         )
+        # The Critic's output is passed in as something the takeaway must ADDRESS.
+        # Left out, an LLM naturally writes a tidy story and the conflict disappears —
+        # which is exactly the failure the Critic step exists to prevent.
+        critic_note = ""
+        if contradictions or tensions:
+            critic_note = (
+                "A Critic reviewed these findings and raised the CONTRADICTIONS and "
+                "TENSIONS below. Your takeaway MUST acknowledge them rather than "
+                "smoothing them over or ignoring them.\n"
+            )
         prompt = (
             f"Write a 2-4 sentence 'Key Takeaway' for {company}, synthesizing ONLY the "
             f"validated findings below. Do not state any number that is not already present "
             f"in the findings. Do not give a buy/sell/hold recommendation.\n"
+            f"{critic_note}"
             f"FINANCIAL: {json.dumps([f.model_dump(mode='json') for f in financial])}\n"
             f"NEWS: {json.dumps([n.model_dump(mode='json') for n in news])}\n"
             f"RISK: {json.dumps([r.model_dump(mode='json') for r in risk])}\n"
             f"CONTRADICTIONS: {json.dumps([c.model_dump(mode='json') for c in contradictions])}\n"
+            f"TENSIONS: {json.dumps([t.model_dump(mode='json') for t in (tensions or [])])}\n"
         )
         try:
             reply = self._ensure_llm().invoke(prompt)

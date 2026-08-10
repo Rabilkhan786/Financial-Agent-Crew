@@ -16,18 +16,18 @@ def route_after_manager(state: PanelState) -> list[str]:
     """Dispatch only the specialists this question actually needs.
 
     Returning a list makes LangGraph fan out to all of them in parallel. If the
-    plan somehow asks for nobody, we go straight to the analyst rather than
-    stalling the graph — it will report insufficient evidence, which is honest.
+    plan somehow asks for nobody, we go straight to the critic rather than
+    stalling the graph — the report will say insufficient evidence, which is honest.
     """
     plan = state.get("query_plan") or QueryPlan()
-    return plan.required_agents() or ["analyst"]
+    return plan.required_agents() or ["critic"]
 
 
-def route_after_analyst(state: PanelState) -> str:
+def route_after_critic(state: PanelState) -> str:
     """Return the name of the next node: a specialist to re-ask, or "report".
 
     The returned string must match a node name in the workflow. We cap follow-ups
-    at config.MAX_FOLLOWUP_ROUNDS so the analyst -> specialist -> analyst loop can
+    at config.MAX_FOLLOWUP_ROUNDS so the critic -> specialist -> critic loop can
     never run forever.
     """
     contradictions = state.get("contradictions") or []
@@ -40,4 +40,4 @@ def route_after_analyst(state: PanelState) -> str:
         # quietly undo the routing decision and re-introduce the cost we avoided.
         if target in plan.required_agents():
             return target
-    return "report"
+    return "analyst"
