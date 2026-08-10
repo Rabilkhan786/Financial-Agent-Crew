@@ -199,6 +199,37 @@ def test_crosscheck_refuses_to_claim_consistent_without_financial_data():
     assert "NOT evidence that the findings agree" in explanation
 
 
+def test_skipped_agent_reads_as_not_requested_not_as_a_failure():
+    # CHANGE 1: News was never dispatched, so its rows must NOT claim we looked
+    # and came up short — that would misrepresent a routing decision as a failure.
+    report = Report(company="Acme", company_description="x", summary="s",
+                     financial_findings=[_ff("revenue_growth", 10, True)],
+                     query_intent="financial_health", skipped_agents=["news", "risk"])
+    rows = {r["question"]: r for r in build_human_checklist(report)}
+    moat = rows["Does it have a durable competitive advantage (moat)?"]
+    assert moat["status"] == "Not requested"
+    assert "does not need the news agent" in moat["missing_reason"]
+
+
+def test_failed_agent_still_reads_as_insufficient_evidence():
+    # Nothing was skipped: an empty section here really is a data failure.
+    report = Report(company="Acme", company_description="x", summary="s",
+                     financial_findings=[_ff("revenue_growth", 10, True)])
+    rows = {r["question"]: r for r in build_human_checklist(report)}
+    moat = rows["Does it have a durable competitive advantage (moat)?"]
+    assert moat["status"] == "Insufficient evidence"
+
+
+def test_crosscheck_says_not_requested_when_an_agent_was_skipped():
+    report = Report(company="Acme", company_description="x", summary="s",
+                     financial_findings=[_ff("revenue_growth", 10, True)],
+                     query_intent="financial_health", skipped_agents=["news", "risk"])
+    status, explanation = crosscheck_conclusion(report)
+    assert status == "Cross-check not possible"
+    assert "was not requested" in explanation
+    assert "could not be retrieved" not in explanation
+
+
 def test_crosscheck_reports_consistent_only_with_both_sides_present():
     report = Report(company="Acme", company_description="x", summary="s",
                      financial_findings=[_ff("revenue_growth", 10, True)],

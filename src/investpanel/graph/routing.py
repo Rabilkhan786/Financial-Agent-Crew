@@ -9,6 +9,18 @@ discipline a real analyst has when working to a deadline.
 
 from investpanel import config
 from investpanel.graph.state import PanelState
+from investpanel.models.query_plan import QueryPlan
+
+
+def route_after_manager(state: PanelState) -> list[str]:
+    """Dispatch only the specialists this question actually needs.
+
+    Returning a list makes LangGraph fan out to all of them in parallel. If the
+    plan somehow asks for nobody, we go straight to the analyst rather than
+    stalling the graph — it will report insufficient evidence, which is honest.
+    """
+    plan = state.get("query_plan") or QueryPlan()
+    return plan.required_agents() or ["analyst"]
 
 
 def route_after_analyst(state: PanelState) -> str:
@@ -20,8 +32,12 @@ def route_after_analyst(state: PanelState) -> str:
     """
     contradictions = state.get("contradictions") or []
     rounds = state.get("rounds", 0)
+    plan = state.get("query_plan") or QueryPlan()
 
     if contradictions and rounds < config.MAX_FOLLOWUP_ROUNDS:
-        # Follow up with the ONE specialist this contradiction points at.
-        return contradictions[0].follow_up_target  # "financial", "news", or "risk"
+        target = contradictions[0].follow_up_target  # "financial", "news", or "risk"
+        # Never wake a specialist this question deliberately skipped — that would
+        # quietly undo the routing decision and re-introduce the cost we avoided.
+        if target in plan.required_agents():
+            return target
     return "report"

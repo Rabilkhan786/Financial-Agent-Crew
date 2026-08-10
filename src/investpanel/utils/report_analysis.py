@@ -330,6 +330,23 @@ _QUALITATIVE_QUESTIONS = {
 }
 
 
+def _skip_note(report: Report, category: str) -> str:
+    """The reason text for a row with no data.
+
+    A specialist the Query Analyzer deliberately didn't dispatch is NOT a failure,
+    and must not read like one — "insufficient evidence" means we looked and came
+    up short, which would be untrue here.
+    """
+    if category in report.skipped_agents:
+        intent = (report.query_intent or "this question").replace("_", " ")
+        return f"Not requested — {intent} does not need the {category} agent, so it was not run."
+    return MISSING_EVIDENCE_REASONS[category]
+
+
+def _status_for_missing(report: Report, category: str) -> str:
+    return "Not requested" if category in report.skipped_agents else "Insufficient evidence"
+
+
 def build_human_checklist(report: Report) -> list[dict[str, str]]:
     """The 10-question checklist as a human-readable table.
 
@@ -347,9 +364,10 @@ def build_human_checklist(report: Report) -> list[dict[str, str]]:
         category = "risk" if metric in _RISK_METRICS else "financial"
         finding = by_metric.get(metric)
         if finding is None:
-            rows.append({"question": question, "result": "Insufficient evidence",
-                         "status": "Insufficient evidence", "why_it_matters": why,
-                         "category": category, "missing_reason": MISSING_EVIDENCE_REASONS[category]})
+            status = _status_for_missing(report, category)
+            rows.append({"question": question, "result": status,
+                         "status": status, "why_it_matters": why,
+                         "category": category, "missing_reason": _skip_note(report, category)})
             continue
         if isinstance(finding, RiskFinding):
             elevated = (
@@ -372,21 +390,26 @@ def build_human_checklist(report: Report) -> list[dict[str, str]]:
     for q_key, (question, why) in _QUALITATIVE_QUESTIONS.items():
         answer = report.checklist_answers.get(q_key, "insufficient evidence")
         insufficient = not answer or "insufficient evidence" in answer.lower()
+        status = _status_for_missing(report, "news") if insufficient else "Answered"
         rows.append({
             "question": question,
-            "result": "Insufficient evidence" if insufficient else answer,
-            "status": "Insufficient evidence" if insufficient else "Answered",
+            "result": status if insufficient else answer,
+            "status": status,
             "why_it_matters": why,
             "category": "news",
-            "missing_reason": MISSING_EVIDENCE_REASONS["news"] if insufficient else "",
+            "missing_reason": _skip_note(report, "news") if insufficient else "",
         })
     return rows
 
 
 def missing_evidence_rows(report: Report) -> list[dict[str, str]]:
-    """The subset of the checklist that came back "Insufficient evidence", each
-    with a specific reason — used for the report's "Missing Evidence" section."""
-    return [row for row in build_human_checklist(report) if row["status"] == "Insufficient evidence"]
+    """Checklist rows that came back without data, each with a specific reason.
+
+    Covers both "we tried and came up short" and "this question didn't need that
+    agent" — the row's own status says which, so the two are never conflated.
+    """
+    unanswered = ("Insufficient evidence", "Not requested")
+    return [row for row in build_human_checklist(report) if row["status"] in unanswered]
 
 
 def peer_comparison_note(report: Report) -> str | None:
@@ -462,17 +485,23 @@ def crosscheck_conclusion(report: Report) -> tuple[str, str]:
     has_narrative = bool(report.news_findings) or bool(report.risk_findings)
 
     if not has_numbers or not has_narrative:
-        missing = []
-        if not has_numbers:
-            missing.append("financial data")
-        if not report.news_findings:
-            missing.append("news coverage")
-        if not report.risk_findings:
-            missing.append("price/risk data")
+        labels = {"financial": "financial data", "news": "news coverage", "risk": "price/risk data"}
+        present = {"financial": has_numbers, "news": bool(report.news_findings),
+                   "risk": bool(report.risk_findings)}
+        # Separate "we didn't run it" from "we ran it and got nothing" — only the
+        # second one is a data failure.
+        skipped = [labels[k] for k, ok in present.items() if not ok and k in report.skipped_agents]
+        missing = [labels[k] for k, ok in present.items() if not ok and k not in report.skipped_agents]
+
+        why = []
+        if skipped:
+            why.append(f"{' and '.join(skipped)} was not requested for this question")
+        if missing:
+            why.append(f"{' and '.join(missing)} could not be retrieved")
         explanation = (
             "The analyst compares numeric findings against the news and risk findings. "
-            f"Missing {' and '.join(missing)} means there was nothing to compare, so the "
-            "absence of contradictions here is NOT evidence that the findings agree."
+            f"Here {'; '.join(why)}, so there was nothing to compare — the absence of "
+            "contradictions is NOT evidence that the findings agree."
         )
         return ("Cross-check not possible", explanation)
 

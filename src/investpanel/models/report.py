@@ -38,6 +38,13 @@ class Report(BaseModel):
     question: str | None = None
     interpreted_question: str | None = None
 
+    # How the Query Analyzer routed this run. Kept so a section that is empty
+    # *by design* reads as "not requested for this question" rather than the
+    # misleading "insufficient evidence" (which means we tried and failed).
+    query_intent: str | None = None
+    routing_reason: str | None = None
+    skipped_agents: list[str] = Field(default_factory=list)
+
     # Keys "q2".."q10": each a short answer + confidence, or "insufficient
     # evidence". This dict is what docs/evaluation.md reports completeness on.
     checklist_answers: dict[str, str] = Field(default_factory=dict)

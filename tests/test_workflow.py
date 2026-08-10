@@ -75,13 +75,24 @@ def _news_contradiction():
     )
 
 
-def _panel(analyst, failing=None):
+class FakeQueryAnalyzer:
+    """Returns a fixed plan, so a test can pin which specialists should run."""
+
+    def __init__(self, plan):
+        self._plan = plan
+
+    def plan_query(self, question):
+        return self._plan
+
+
+def _panel(analyst, failing=None, query_analyzer=None):
     return Panel(
         manager=FakeManager(),
         financial=FailingSpecialist() if failing == "financial" else FakeSpecialist(),
         news=FakeSpecialist(),
         risk=FakeSpecialist(),
         analyst=analyst,
+        query_analyzer=query_analyzer,
     )
 
 
@@ -121,6 +132,45 @@ def test_loop_stops_at_round_limit_when_contradiction_persists():
     assert state["report"].contradictions_resolved == config.MAX_FOLLOWUP_ROUNDS
     # Analyst runs once initially, then once after each follow-up round.
     assert analyst.cross_check_calls == config.MAX_FOLLOWUP_ROUNDS + 1
+
+
+def test_risk_only_question_does_not_run_financial_or_news():
+    # CHANGE 1: the whole point — a risk question must not pay for FMP and Tavily.
+    from investpanel.models.query_plan import QueryPlan
+
+    analyst = FakeAnalyst(sequence=[[]])
+    panel = _panel(analyst, query_analyzer=FakeQueryAnalyzer(QueryPlan.for_intent("risk_only")))
+    graph = build_workflow(panel)
+    state = graph.invoke({"question": "How volatile is Acme?"})
+
+    assert panel.risk.calls == 1        # the one agent the question needed
+    assert panel.financial.calls == 0   # skipped
+    assert panel.news.calls == 0        # skipped
+    assert isinstance(state["report"], Report)
+
+
+def test_quick_fact_runs_financial_only():
+    from investpanel.models.query_plan import QueryPlan
+
+    analyst = FakeAnalyst(sequence=[[]])
+    panel = _panel(analyst, query_analyzer=FakeQueryAnalyzer(QueryPlan.for_intent("quick_fact")))
+    build_workflow(panel).invoke({"question": "What is Acme's P/E?"})
+
+    assert panel.financial.calls == 1
+    assert panel.news.calls == 0
+    assert panel.risk.calls == 0
+
+
+def test_full_due_diligence_still_runs_all_three():
+    from investpanel.models.query_plan import QueryPlan
+
+    analyst = FakeAnalyst(sequence=[[]])
+    panel = _panel(analyst, query_analyzer=FakeQueryAnalyzer(QueryPlan.for_intent("full_due_diligence")))
+    build_workflow(panel).invoke({"question": "Is Acme a good investment?"})
+
+    assert panel.financial.calls == 1
+    assert panel.news.calls == 1
+    assert panel.risk.calls == 1
 
 
 def test_failing_specialist_degrades_gracefully():

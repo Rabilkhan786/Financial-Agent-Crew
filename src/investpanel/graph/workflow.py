@@ -18,9 +18,11 @@ from investpanel.agents.analyst import AnalystAgent
 from investpanel.agents.financial import FinancialAgent
 from investpanel.agents.manager import ManagerAgent
 from investpanel.agents.news import NewsAgent
+from investpanel.agents.query_analyzer import QueryAnalyzerAgent
 from investpanel.agents.risk import RiskAgent
-from investpanel.graph.routing import route_after_analyst
+from investpanel.graph.routing import route_after_analyst, route_after_manager
 from investpanel.graph.state import PanelState
+from investpanel.models.query_plan import QueryPlan
 from investpanel.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -28,13 +30,15 @@ logger = get_logger(__name__)
 
 @dataclass
 class Panel:
-    """The five agents that make up the panel."""
+    """The agents that make up the panel."""
 
     manager: object
     financial: object
     news: object
     risk: object
     analyst: object
+    # Runs before the manager to decide which specialists this question needs.
+    query_analyzer: object = None
 
 
 def build_panel() -> Panel:
@@ -55,6 +59,7 @@ def build_panel() -> Panel:
         news=NewsAgent(),
         risk=RiskAgent(),
         analyst=analyst,
+        query_analyzer=QueryAnalyzerAgent(),
     )
 
 
@@ -84,9 +89,12 @@ def build_workflow(panel: Panel):
             update["financial_findings"] = []
             update["errors"] = [f"financial: {error}"]
 
-        # Build the peer table separately (first pass only). A failure here must NOT
-        # discard the target's own findings, so it's in its own try.
-        if not followup:
+        # Build the peer table separately (first pass only, and only when this
+        # question actually wants a peer comparison — it's several extra API calls).
+        # A failure here must NOT discard the target's own findings, so it's in its
+        # own try.
+        plan = state.get("query_plan") or QueryPlan()
+        if not followup and plan.needs_peers:
             try:
                 tickers = [t for t in [scope.ticker, *scope.competitors] if t]
                 update["peer_comparison"] = panel.financial.peer_metric_table(tickers)
@@ -146,7 +154,11 @@ def build_workflow(panel: Panel):
 
     def report_node(state: PanelState) -> dict:
         scope = state["scope"]
+        plan = state.get("query_plan") or QueryPlan()
         report = panel.analyst.write_report(
+            query_intent=plan.intent,
+            routing_reason=plan.reasoning,
+            skipped_agents=plan.skipped_agents(),
             company=scope.company,
             ticker=scope.ticker,
             question=state.get("question"),
@@ -163,7 +175,15 @@ def build_workflow(panel: Panel):
         )
         return {"report": report}
 
+    def query_analyzer_node(state: PanelState) -> dict:
+        # No analyzer supplied (older callers, and tests that don't care about
+        # routing) means the panel behaves exactly as before: run everything.
+        if panel.query_analyzer is None:
+            return {"query_plan": QueryPlan()}
+        return {"query_plan": panel.query_analyzer.plan_query(state["question"])}
+
     builder = StateGraph(PanelState)
+    builder.add_node("query_analyzer", query_analyzer_node)
     builder.add_node("manager", manager_node)
     builder.add_node("financial", financial_node)
     builder.add_node("news", news_node)
@@ -171,12 +191,18 @@ def build_workflow(panel: Panel):
     builder.add_node("analyst", analyst_node)
     builder.add_node("report", report_node)
 
-    builder.add_edge(START, "manager")
-    # Manager fans out to the three specialists, which run in parallel.
-    builder.add_edge("manager", "financial")
-    builder.add_edge("manager", "news")
-    builder.add_edge("manager", "risk")
-    # The three fan back in to the analyst (it waits for all three).
+    # Classify the question first, so the Manager knows who to wake up.
+    builder.add_edge(START, "query_analyzer")
+    builder.add_edge("query_analyzer", "manager")
+    # The Manager fans out to ONLY the specialists this question needs. Returning a
+    # list from the router makes LangGraph run them in parallel, as before — the
+    # difference is that a risk-only question no longer pays for news and FMP calls.
+    builder.add_conditional_edges(
+        "manager",
+        route_after_manager,
+        {"financial": "financial", "news": "news", "risk": "risk", "analyst": "analyst"},
+    )
+    # Whoever ran fans back in to the analyst.
     builder.add_edge("financial", "analyst")
     builder.add_edge("news", "analyst")
     builder.add_edge("risk", "analyst")

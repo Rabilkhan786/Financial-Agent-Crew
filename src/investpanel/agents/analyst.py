@@ -324,6 +324,9 @@ class AnalystAgent(BaseAgent):
         question: str | None = None,
         interpreted_question: str | None = None,
         price_history: list[float] | None = None,
+        query_intent: str | None = None,
+        routing_reason: str | None = None,
+        skipped_agents: list[str] | None = None,
     ) -> Report:
         """Assemble the final Report. The disclaimer is added by the model itself."""
         report = Report(
@@ -331,6 +334,9 @@ class AnalystAgent(BaseAgent):
             ticker=ticker,
             question=question,
             interpreted_question=interpreted_question,
+            query_intent=query_intent,
+            routing_reason=routing_reason,
+            skipped_agents=skipped_agents or [],
             company_description=company_description or "Description unavailable.",
             summary=self._summary(company, financial, news, risk, contradictions),
             checklist_answers=build_checklist_answers(financial, news, risk),

@@ -12,12 +12,16 @@ from typing import Annotated, TypedDict
 
 from investpanel.models.contradiction import Contradiction
 from investpanel.models.findings import FinancialFinding, NewsFinding, RiskFinding
+from investpanel.models.query_plan import QueryPlan
 from investpanel.models.report import Report
 from investpanel.models.scope import ResearchScope
 
 
 class PanelState(TypedDict, total=False):
     question: str
+    # Which specialists this question needs — set by the Query Analyzer and used
+    # to fan out to only those, instead of always running all three.
+    query_plan: QueryPlan | None
     scope: ResearchScope | None
     company_description: str
 
