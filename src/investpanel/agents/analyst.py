@@ -22,7 +22,7 @@ from investpanel.models.findings import FinancialFinding, NewsFinding, RiskFindi
 from investpanel.models.observation import Observation
 from investpanel.models.report import Report
 from investpanel.utils.logging import get_logger
-from investpanel.utils.numeric_guard import verify_summary
+from investpanel.utils.numeric_guard import extract_numbers, verify_summary
 from investpanel.utils.observations import collect_observations
 
 logger = get_logger(__name__)
@@ -409,6 +409,10 @@ class AnalystAgent(BaseAgent):
         except Exception:  # noqa: BLE001 - no key / rate limit / provider error: use the template
             return fallback
         text = getattr(reply, "content", str(reply)).strip()
+        # Models often echo the label back; the report already prints it as a heading.
+        for prefix in ("Key Takeaway:", "**Key Takeaway:**", "Key takeaway:"):
+            if text.startswith(prefix):
+                text = text[len(prefix):].strip()
         if not text:
             return fallback
 
@@ -416,7 +420,7 @@ class AnalystAgent(BaseAgent):
         # every figure in the prose must trace back to a number Python computed. If
         # the model invented one, we drop the prose entirely rather than publish a
         # fabricated financial figure.
-        allowed = [f.value for f in financial] + [r.value for r in risk]
+        allowed = _allowed_numbers(financial, risk)
         clean, offenders = verify_summary(text, allowed)
         if not clean:
             logger.warning(
@@ -425,6 +429,24 @@ class AnalystAgent(BaseAgent):
             self.trace({"rejected_summary": text, "unsupported_numbers": offenders})
             return fallback
         return text
+
+
+def _allowed_numbers(financial, risk) -> list[float]:
+    """Every number the summary may legitimately quote.
+
+    Not just the metric values: the findings' own sentences carry real numbers too
+    ("100-day close series", "versus a 40% threshold"). Those are computed facts the
+    model is entitled to repeat, so leaving them out makes the guard reject good
+    summaries — which is how a safety check quietly becomes a quality problem.
+    """
+    values = [f.value for f in financial] + [r.value for r in risk]
+    for finding in [*financial, *risk]:
+        text = " ".join(
+            str(getattr(finding, field, "") or "")
+            for field in ("interpretation", "computed_from", "period", "source")
+        )
+        values.extend(extract_numbers(text))
+    return values
 
 
 # Which financial metric answers which checklist question.

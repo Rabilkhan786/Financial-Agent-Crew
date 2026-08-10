@@ -72,6 +72,28 @@ def test_analyst_discards_a_summary_containing_invented_numbers():
     assert "1/1 financial metrics" in summary  # fell back to the counted template
 
 
+def test_numbers_quoted_from_a_finding_sentence_are_allowed():
+    # Regression from a live run: the guard rejected "100-day" and the "40% threshold",
+    # both of which are computed facts stated in the findings' own text.
+    from investpanel.agents.analyst import AnalystAgent
+    from investpanel.models.findings import RiskFinding
+
+    class QuotingLLM:
+        def invoke(self, prompt):
+            class R:
+                content = ("Annualized volatility is 45% over a 100-day close series, "
+                           "moderate versus a 40% threshold.")
+            return R()
+
+    risk = [RiskFinding(
+        metric="annualized_volatility", value=0.45,
+        computed_from="100-day close series, AlphaVantage",
+        interpretation="Annualized volatility is 45% — moderate versus a 40% threshold.",
+    )]
+    summary = AnalystAgent(llm=QuotingLLM())._summary("Acme", [], [], risk, [])
+    assert "100-day" in summary  # kept, not discarded
+
+
 def test_analyst_keeps_a_summary_that_only_uses_real_numbers():
     from investpanel.agents.analyst import AnalystAgent
     from investpanel.models.findings import FinancialFinding

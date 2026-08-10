@@ -89,7 +89,32 @@ Phase 3  Financial + News + Risk agents                [x] GATE 3 verified live 
 Phase 4  Manager + Analyst + cross-check loop           [x] GATE 4 passed live (TSLA: caught P/E-vs-shrinking-profit, looped to News, 2 rounds)
 Phase 5  Full eval, error analysis, ablation            [x] REAL numbers (n=11): baseline 0.77/0.83 > panel 0.48/0.50; honest analysis written (data/label confound)
 Phase 6  Streamlit, Docker, deploy, docs                [~] PORTFOLIO scope: app+docs+README done as portfolio; deploy/CI intentionally OUT OF SCOPE
+Phase 7  Upgrade: routing, numerics, critic, peers      [x] all 5 changes done + verified live (158 tests)
 ```
+
+**Phase 7 (upgrade) — what changed and why:**
+
+1. **Query Analyzer** (`agents/query_analyzer.py`, `models/query_plan.py`) — classifies
+   the question and dispatches ONLY the specialists it needs. The LLM picks one label;
+   the label→agents mapping is a Python table because routing is control flow. Falls
+   back to full due diligence on any failure. A skipped agent reports "Not requested",
+   never "Insufficient evidence" — a routing choice must not look like a data failure.
+2. **All numerics deterministic** — audit found no LLM was ever doing arithmetic. Two
+   gaps closed: margins (gross/operating/net) and cash conversion were never computed
+   at all, and the Key Takeaway prose was prompt-trusted. `utils/numeric_guard.py` now
+   rejects any generated summary containing a number that isn't in the findings.
+   Scalar math stays plain Python — Pandas would add indirection, not determinism.
+3. **Critic** (`agents/critic.py`) — cross-examines the specialists as its own graph node
+   before the Analyst synthesizes, and drives the follow-up loop. The Analyst's prompt
+   is told it MUST address what the Critic raised, so conflicts can't be smoothed over.
+4. **Competitor comparison completed** — competitor tickers are now verified through the
+   same resolve_ticker path as the target (unverifiable ones were silently vanishing),
+   and the table gained a "vs peers" column that knows a LOW P/E or debt ratio is good.
+5. **Checklist is a floor, not a ceiling** (`models/observation.py`,
+   `utils/observations.py`) — deterministic detectors surface material findings no
+   checklist question asks about, each citing its evidence. NVDA yields 0; INTC yields 4.
+
+Not added, deliberately: RAG/vector DB, SEC EDGAR, DCF modelling, governance agent.
 
 **Last completed:** Phase 1 — `eval/datasets/heldout_questions.py` (34 hand-built, date-
 stamped questions; 11 labeled with a real financial-vs-qualitative contradiction; writes
@@ -166,17 +191,30 @@ that use them, to keep the env lean and honor build-order discipline.
 ## Architecture (one line each)
 
 ```
-manager      reads the question, sets scope (company, time window), dispatches specialists
-financial    pulls real fundamentals (FMP) + price history (Alpha Vantage), with sources
-news         searches (Tavily) for recent events, fetches and summarizes real articles
-risk         computes volatility/exposure from the financial agent's own price data —
-             plain Python math, not a separate API
-analyst      cross-checks: do financial, news, and risk findings actually agree?
-             if not, sends a specific follow-up back to ONE specialist (max 2 rounds)
-             then writes the report, with the disclaimer, always
+query_analyzer  classifies the question into an intent (quick_fact / financial_health /
+                risk_only / news_only / competitor_comparison / full_due_diligence) and
+                the intent decides which specialists run. LLM picks the LABEL only;
+                the label -> agents mapping is a Python table, because routing is
+                control flow. Any failure falls back to full due diligence.
+manager         reads the question, fixes typos, resolves + VERIFIES the ticker against
+                real FMP data, finds and verifies 2-3 competitors, sets the scope
+financial       pulls real fundamentals (FMP), computes 14 metrics in plain Python
+                (growth, margins, cash conversion, leverage, returns, valuation)
+news            searches (Tavily) for recent events, fetches and summarizes real articles
+risk            computes volatility/drawdown from price data — plain Python math, no
+                separate API; refuses to report numbers from a stale/flat price series
+critic          cross-examines the three specialists BEFORE anyone synthesizes. Returns
+                confirmed contradictions, softer tensions, and additional findings the
+                checklist never asked about. Drives the bounded follow-up loop.
+analyst         synthesizes the final report and must explicitly address what the Critic
+                raised; the disclaimer is always present
 ```
 
-Loop: analyst -> one specialist, only when a specific contradiction is found. Max 2 rounds.
+Flow: query_analyzer -> manager -> (only the needed specialists, in parallel) -> critic
+-> analyst -> report.
+
+Loop: critic -> one specialist, only when a specific contradiction is found. Max 2 rounds,
+and never to a specialist the query plan deliberately skipped.
 
 ---
 
@@ -201,8 +239,10 @@ investpanel/
 │   └── interview_notes.md       written in Phase 6
 ├── src/investpanel/
 │   ├── config.py
-│   ├── models/                  question, finding, contradiction, report
-│   ├── agents/                  base, manager, financial, news, risk, analyst
+│   ├── models/                  scope, findings, contradiction+tension, observation,
+│   │                            query_plan, report
+│   ├── agents/                  base, query_analyzer, manager, financial, news, risk,
+│   │                            critic, analyst
 │   ├── tools/
 │   │   ├── fmp_client.py        fundamentals
 │   │   ├── alphavantage_client.py   price history
@@ -211,8 +251,13 @@ investpanel/
 │   │   ├── cache.py             disk cache for all of the above
 │   │   └── volatility.py        PURE PYTHON — std dev of returns, no LLM
 │   ├── graph/                   state, workflow, routing
-│   ├── llm/                     factory, usage
-│   └── utils/                   logging, tracing
+│   ├── llm/                     factory
+│   └── utils/                   logging, tracing, trace_stats,
+│                                report_format (number -> human string),
+│                                report_analysis (deterministic interpretation),
+│                                report_export, observations (beyond-checklist
+│                                detectors), numeric_guard (LLM prose can only
+│                                quote computed numbers)
 ├── eval/
 │   ├── datasets/
 │   │   └── heldout_questions.py    hand-built, with what-was-knowable-at-the-time notes

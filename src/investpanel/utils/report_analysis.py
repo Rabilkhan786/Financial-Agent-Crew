@@ -176,9 +176,17 @@ def evidence_quality(report: Report, target_ticker: str | None = None) -> dict[s
         "Risk": _risk_quality(report.risk_findings),
         "Peer comparison": _peer_quality(report.peer_comparison, target_ticker),
     }
-    required = [per_source["Financial"], per_source["News"], per_source["Risk"]]
-    overall = min(required, key=lambda label: _QUALITY_RANK[label])
-    per_source["Overall"] = overall
+    # An agent this question never asked for must not drag the rating down: a
+    # risk-only run that answered the risk question fully is High-quality evidence
+    # for what was actually asked, not "Insufficient" because there's no news.
+    skipped = {name.capitalize() for name in report.skipped_agents}
+    considered = [
+        quality for source, quality in per_source.items()
+        if source in ("Financial", "News", "Risk") and source not in skipped
+    ]
+    per_source["Overall"] = (
+        min(considered, key=lambda label: _QUALITY_RANK[label]) if considered else "Insufficient"
+    )
     return per_source
 
 

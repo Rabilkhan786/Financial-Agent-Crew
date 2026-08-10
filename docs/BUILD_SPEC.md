@@ -430,3 +430,96 @@ At the end of the build, produce `docs/interview_notes.md` answering, in plain E
 
 Read this whole document and `CLAUDE.md`. Then create the folder structure and Phase 0
 files, explain each one in plain English, and stop at GATE 0.
+
+---
+
+# Amendment A — Phase 7 upgrade (supersedes the sections it names)
+
+The original spec above describes the system as first built. This amendment records
+five changes made afterwards. Where the two disagree, this amendment wins.
+
+## A1. Dynamic routing (new: Query Analyzer)
+
+The original design always ran Financial + News + Risk. That is wasteful for a
+question like "what is Nike's P/E?" and it dilutes the report with sections nobody
+asked for.
+
+A **Query Analyzer** runs before the Manager and classifies the question into one
+`QueryIntent`: `quick_fact`, `financial_health`, `risk_only`, `news_only`,
+`competitor_comparison`, or `full_due_diligence`. The intent maps to a set of
+specialists via a **Python table**, not via LLM output — the model chooses one label
+and nothing more, because routing is control flow and must not depend on the model
+returning a well-formed combination of booleans.
+
+Rules:
+- Any classification failure falls back to `full_due_diligence`. Running too much is
+  a cost problem; running too little is a correctness problem.
+- The follow-up loop may never wake a specialist the plan skipped.
+- A skipped agent is reported as **"Not requested"**, never "Insufficient evidence" —
+  a routing decision must not be presented to the reader as a data failure.
+
+## A2. All numeric work is deterministic Python
+
+Restates and tightens hard rule "never fabricate a number".
+
+- Every ratio, growth rate, margin and valuation figure is computed by an explicit
+  Python function over raw API fields. The LLM interprets numbers; it never produces
+  them.
+- Metrics: revenue/profit growth, **gross/operating/net margin**, operating cash flow,
+  **cash conversion (OCF ÷ net income)**, debt-to-equity, interest coverage, ROCE, ROE,
+  P/E, P/B, PEG-like, annualized volatility, max drawdown.
+- **Enforcement, not instruction:** `utils/numeric_guard.py` extracts every figure from
+  any LLM-generated prose and checks it against the computed findings. A summary
+  containing an unsupported number is discarded in favour of a counted template.
+  It tolerates honest rounding (0.2091 → "20.9%") and rejects fabrication.
+- Scalar math stays plain Python rather than Pandas: a DataFrame around a single
+  division adds indirection without adding determinism, and the project's style rule
+  is code the maintainer can read line by line.
+
+## A3. Critic step (new agent)
+
+Supersedes "the analyst cross-checks". The cross-check is now a **separate node**
+between the specialists and the Analyst.
+
+- `CriticAgent.review()` returns three separate things: **confirmed contradictions**
+  (which earn a follow-up round), **potential tensions** (worth attention, never
+  trigger the loop), and **additional findings** (see A5).
+- The Critic drives the bounded follow-up loop. `MAX_FOLLOWUP_ROUNDS = 2` is unchanged.
+- The Analyst receives the Critic's output as input it **must address**; its prompt
+  says so explicitly. Splitting the roles matters because synthesis naturally pulls
+  toward a tidy story, and a tidy story is where contradictions go to die.
+
+## A4. Competitor comparison (completed)
+
+The comparison existed; two things were missing.
+
+- Competitor tickers came straight from the LLM and were never verified, so
+  unresolvable symbols silently vanished from the table. Every candidate now goes
+  through the same `resolve_ticker` verification as the target, duplicates are
+  dropped, and the count is capped by `config.MAX_COMPETITORS`.
+- The table gained a **"vs peers"** column comparing the target to the peer average,
+  with direction interpreted per metric — being *below* the peer average on debt or
+  P/E is favourable, not a shortfall.
+- Known limitation: the FMP free plan returns 402 for many non-US peers, so those
+  comparisons show "no peer data" with a stated reason.
+
+## A5. The checklist is a floor, not a ceiling
+
+Supersedes any reading of section 4 that treats the 10 questions as the maximum scope.
+
+The checklist is the **minimum** every report must cover. Agents may surface any
+additional financially material finding, carried as an `Observation` (source, title,
+detail, severity, **evidence**). Detectors are deterministic and each cites the
+numbers it fired on: margin consumed before the bottom line, operating losses, profit
+not converting to cash, growth-priced valuation without growth, thin interest cover,
+drawdown deeper than volatility implies, and sourced news that no checklist question
+covers.
+
+An LLM is deliberately *not* asked to "find anything else interesting" — that produces
+confident commentary with no evidence behind it, which is the failure mode this
+project exists to avoid.
+
+## A6. Explicitly out of scope
+
+Not added, and not to be added without a new decision: RAG / vector databases,
+SEC EDGAR integration, DCF or scenario modelling, and a management/governance agent.

@@ -94,6 +94,24 @@ def test_evidence_quality_high_when_well_covered():
     assert q["Overall"] == "High"
 
 
+def test_overall_quality_ignores_agents_that_were_never_requested():
+    # A risk-only run that fully answered the risk question is not "Insufficient"
+    # just because there is no news — nobody asked for news.
+    report = Report(company="Acme", company_description="x", summary="s",
+                     risk_findings=[_rf("annualized_volatility", 0.2, days=252)],
+                     query_intent="risk_only", skipped_agents=["financial", "news"])
+    quality = evidence_quality(report)
+    assert quality["Risk"] == "High"
+    assert quality["Overall"] == "High"
+
+
+def test_overall_quality_still_drops_for_a_requested_agent_that_failed():
+    report = Report(company="Acme", company_description="x", summary="s",
+                     risk_findings=[_rf("annualized_volatility", 0.2, days=252)],
+                     query_intent="full_due_diligence", skipped_agents=[])
+    assert evidence_quality(report)["Overall"] == "Insufficient"
+
+
 def test_evidence_quality_peer_unavailable_when_empty():
     report = Report(company="Acme", company_description="x", summary="s")
     assert evidence_quality(report)["Peer comparison"] == "Insufficient"
