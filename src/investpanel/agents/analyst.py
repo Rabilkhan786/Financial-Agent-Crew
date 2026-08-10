@@ -17,7 +17,7 @@ import json
 
 from investpanel import config
 from investpanel.agents.base import BaseAgent
-from investpanel.models.contradiction import Contradiction
+from investpanel.models.contradiction import Contradiction, Tension
 from investpanel.models.findings import FinancialFinding, NewsFinding, RiskFinding
 from investpanel.models.report import Report
 
@@ -176,6 +176,73 @@ def detect_contradictions(
     return contradictions
 
 
+def detect_potential_tensions(
+    financial: list[FinancialFinding],
+    news: list[NewsFinding],
+    risk: list[RiskFinding],
+) -> list[Tension]:
+    """Softer signals worth a reader's attention that are NOT automatically a
+    genuine contradiction — kept deliberately separate from detect_contradictions
+    so these never drive the follow-up loop. Pure function, unit-testable.
+
+    These exist so the report can be honest: "revenue up, profit down" deserves a
+    flag, but calling it a "contradiction" would overstate what the numbers show
+    (many healthy companies see this from rising costs or one-off items).
+    """
+    tensions: list[Tension] = []
+    by_metric = {f.metric: f for f in financial}
+
+    revenue = by_metric.get("revenue_growth")
+    profit = by_metric.get("profit_growth")
+    if revenue is not None and profit is not None and revenue.healthy and not profit.healthy:
+        tensions.append(Tension(
+            between=("financial", "financial"),
+            description=(
+                f"Revenue growth is {revenue.value:.1f}% while profit growth is "
+                f"{profit.value:.1f}% — revenue is increasing while profit is declining."
+            ),
+            reason=(
+                "This is not automatically a contradiction, but it warrants investigation "
+                "into margins, costs, or other factors eating into profitability."
+            ),
+        ))
+
+    pe = by_metric.get("pe_ratio")
+    if pe is not None and not pe.healthy and profit is not None and profit.healthy:
+        tensions.append(Tension(
+            between=("financial", "financial"),
+            description=(
+                f"Valuation is rich (P/E {pe.value:.0f}) while profit is genuinely growing "
+                f"({profit.value:.1f}%) — the market may already be pricing in that growth."
+            ),
+            reason=(
+                "Not a contradiction — growth can justify a premium — but worth monitoring "
+                "if growth decelerates, since the valuation leaves little room for a miss."
+            ),
+        ))
+
+    return tensions
+
+
+def explain_consistency(financial: list[FinancialFinding], news: list[NewsFinding]) -> str | None:
+    """When profit growth is a concern AND a risk/management news item plausibly
+    explains it, that pairing is CONSISTENT, not contradictory — the numbers and
+    the story agree. Returns an explanation when that pattern holds, else None."""
+    profit = next((f for f in financial if f.metric == "profit_growth"), None)
+    if profit is None or profit.healthy:
+        return None
+    explaining_news = [n for n in news if n.relevance == "high" and n.checklist_question in ("management", "risk")]
+    if not explaining_news:
+        return None
+    item = explaining_news[0]
+    return (
+        f'Financial finding: profit growth {profit.value:.1f}%. '
+        f'News finding: "{item.headline}". '
+        "Analyst assessment: consistent — the news provides a plausible explanation "
+        "for the weaker profit growth rather than contradicting it."
+    )
+
+
 LLM_CROSSCHECK_PROMPT = """You are checking whether an investment panel's findings agree.
 Below are the numeric findings, the news findings, and the risk findings as JSON.
 
@@ -252,10 +319,13 @@ class AnalystAgent(BaseAgent):
         contradictions: list[Contradiction],
         contradictions_resolved: int,
         peer_comparison: dict[str, dict[str, float]],
+        followup_targets_executed: list[str] | None = None,
+        ticker: str | None = None,
     ) -> Report:
         """Assemble the final Report. The disclaimer is added by the model itself."""
         report = Report(
             company=company,
+            ticker=ticker,
             company_description=company_description or "Description unavailable.",
             summary=self._summary(company, financial, news, risk, contradictions),
             checklist_answers=build_checklist_answers(financial, news, risk),
@@ -265,28 +335,39 @@ class AnalystAgent(BaseAgent):
             risk_findings=risk,
             contradictions_found=contradictions,
             contradictions_resolved=contradictions_resolved,
+            potential_tensions=detect_potential_tensions(financial, news, risk),
+            followup_targets_executed=followup_targets_executed or [],
         )
         self.trace({"company": company, "report_summary": report.summary})
         return report
 
     def _summary(self, company, financial, news, risk, contradictions) -> str:
-        """A short overall summary. Uses the LLM if available, else a plain template."""
-        if self.llm is None:
-            healthy = sum(1 for f in financial if f.healthy)
-            return (
-                f"{company}: {healthy}/{len(financial)} financial metrics healthy, "
-                f"{len(news)} news items reviewed, {len(contradictions)} contradiction(s) found."
-            )
+        """The report's short "Key Takeaway".
+
+        Asks the LLM to synthesize the validated findings. If no LLM is reachable
+        (no API key, rate limit, provider error) we fall back to a plain template
+        built only from counts — a run must never fail just because the prose
+        summary couldn't be written.
+        """
+        fallback = (
+            f"{company}: {sum(1 for f in financial if f.healthy)}/{len(financial)} financial "
+            f"metrics healthy, {len(news)} news items reviewed, "
+            f"{len(contradictions)} contradiction(s) found."
+        )
         prompt = (
-            f"Write 3-4 sentences of balanced summary for {company} based ONLY on these "
-            f"findings. Do not give a buy/sell recommendation.\n"
+            f"Write a 2-4 sentence 'Key Takeaway' for {company}, synthesizing ONLY the "
+            f"validated findings below. Do not state any number that is not already present "
+            f"in the findings. Do not give a buy/sell/hold recommendation.\n"
             f"FINANCIAL: {json.dumps([f.model_dump(mode='json') for f in financial])}\n"
             f"NEWS: {json.dumps([n.model_dump(mode='json') for n in news])}\n"
             f"RISK: {json.dumps([r.model_dump(mode='json') for r in risk])}\n"
             f"CONTRADICTIONS: {json.dumps([c.model_dump(mode='json') for c in contradictions])}\n"
         )
-        reply = self._ensure_llm().invoke(prompt)
-        return getattr(reply, "content", str(reply)).strip()
+        try:
+            reply = self._ensure_llm().invoke(prompt)
+        except Exception:  # noqa: BLE001 - no key / rate limit / provider error: use the template
+            return fallback
+        return getattr(reply, "content", str(reply)).strip() or fallback
 
 
 # Which financial metric answers which checklist question.

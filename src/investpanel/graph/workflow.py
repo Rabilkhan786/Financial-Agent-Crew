@@ -92,6 +92,7 @@ def build_workflow(panel: Panel):
 
         if followup:
             update["rounds"] = state.get("rounds", 0) + 1
+            update["resolved_targets"] = ["financial"]
         return update
 
     def news_node(state: PanelState) -> dict:
@@ -104,6 +105,7 @@ def build_workflow(panel: Panel):
             update = {"news_findings": [], "errors": [f"news: {error}"]}
         if followup:
             update["rounds"] = state.get("rounds", 0) + 1
+            update["resolved_targets"] = ["news"]
         return update
 
     def risk_node(state: PanelState) -> dict:
@@ -115,6 +117,7 @@ def build_workflow(panel: Panel):
             update = {"risk_findings": [], "errors": [f"risk: {error}"]}
         if followup:
             update["rounds"] = state.get("rounds", 0) + 1
+            update["resolved_targets"] = ["risk"]
         return update
 
     def analyst_node(state: PanelState) -> dict:
@@ -136,6 +139,7 @@ def build_workflow(panel: Panel):
         scope = state["scope"]
         report = panel.analyst.write_report(
             company=scope.company,
+            ticker=scope.ticker,
             company_description=state.get("company_description", ""),
             financial=state.get("financial_findings", []),
             news=state.get("news_findings", []),
@@ -143,6 +147,7 @@ def build_workflow(panel: Panel):
             contradictions=_dedup(state.get("all_contradictions", [])),
             contradictions_resolved=state.get("rounds", 0),
             peer_comparison=state.get("peer_comparison", {}),
+            followup_targets_executed=state.get("resolved_targets", []),
         )
         return {"report": report}
 

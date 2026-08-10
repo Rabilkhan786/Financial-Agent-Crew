@@ -3,7 +3,7 @@
 Re-exported here so callers can write ``from investpanel.models import Report``.
 """
 
-from investpanel.models.contradiction import Contradiction
+from investpanel.models.contradiction import Contradiction, Tension
 from investpanel.models.findings import FinancialFinding, NewsFinding, RiskFinding
 from investpanel.models.report import DISCLAIMER_TEXT, Report
 from investpanel.models.scope import ResearchScope
@@ -14,6 +14,7 @@ __all__ = [  # noqa: RUF022 — kept in pipeline order (scope -> findings -> rep
     "NewsFinding",
     "RiskFinding",
     "Contradiction",
+    "Tension",
     "Report",
     "DISCLAIMER_TEXT",
 ]

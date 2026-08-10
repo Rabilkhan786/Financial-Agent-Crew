@@ -37,3 +37,8 @@ class PanelState(TypedDict, total=False):
     report: Report | None
     # Problems that didn't stop the run (add-reducer: nodes append).
     errors: Annotated[list[str], operator.add]
+    # Which specialists were actually re-queried by a follow-up round, in order
+    # (add-reducer: the specialist node itself appends when it runs as a
+    # follow-up). This is how the report can honestly say "follow-up executed"
+    # for a specific contradiction instead of guessing after the fact.
+    resolved_targets: Annotated[list[str], operator.add]

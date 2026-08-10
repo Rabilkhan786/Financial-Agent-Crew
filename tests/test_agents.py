@@ -8,7 +8,11 @@ from datetime import date
 
 import pytest
 
-from investpanel.agents.analyst import detect_contradictions
+from investpanel.agents.analyst import (
+    detect_contradictions,
+    detect_potential_tensions,
+    explain_consistency,
+)
 from investpanel.agents.base import BaseAgent
 from investpanel.agents.financial import compute_findings
 from investpanel.agents.news import NewsAgent
@@ -201,6 +205,73 @@ def test_analyst_no_contradiction_when_expensive_but_growing():
                          period="2025", source="FMP", interpretation="growing", healthy=True),
     ]
     assert detect_contradictions(financial, [], []) == []
+
+
+def test_potential_tension_for_revenue_up_profit_down_not_a_contradiction():
+    from investpanel.models.findings import FinancialFinding
+
+    financial = [
+        FinancialFinding(metric="revenue_growth", value=19.22, unit="percent_yoy", period="2025",
+                         source="FMP", interpretation="up", healthy=True),
+        FinancialFinding(metric="profit_growth", value=-3.45, unit="percent_yoy", period="2025",
+                         source="FMP", interpretation="down", healthy=False),
+    ]
+    # This exact combo must NOT be flagged as a confirmed contradiction...
+    assert detect_contradictions(financial, [], []) == []
+    # ...but SHOULD show up as a potential tension worth a reader's attention.
+    tensions = detect_potential_tensions(financial, [], [])
+    assert len(tensions) == 1
+    assert "revenue is increasing while profit is declining" in tensions[0].description.lower()
+
+
+def test_potential_tension_for_rich_valuation_with_real_growth():
+    from investpanel.models.findings import FinancialFinding
+
+    financial = [
+        FinancialFinding(metric="pe_ratio", value=35.0, unit="ratio", period="TTM",
+                         source="FMP", interpretation="pricey", healthy=False),
+        FinancialFinding(metric="profit_growth", value=19.0, unit="percent_yoy", period="2025",
+                         source="FMP", interpretation="growing", healthy=True),
+    ]
+    tensions = detect_potential_tensions(financial, [], [])
+    assert any("valuation is rich" in t.description.lower() for t in tensions)
+
+
+def test_no_tension_when_growth_is_consistent():
+    from investpanel.models.findings import FinancialFinding
+
+    financial = [
+        FinancialFinding(metric="revenue_growth", value=10.0, unit="percent_yoy", period="2025",
+                         source="FMP", interpretation="up", healthy=True),
+        FinancialFinding(metric="profit_growth", value=10.0, unit="percent_yoy", period="2025",
+                         source="FMP", interpretation="up", healthy=True),
+    ]
+    assert detect_potential_tensions(financial, [], []) == []
+
+
+def test_explain_consistency_when_news_plausibly_explains_weak_profit(monkeypatch):
+    from investpanel.models.findings import FinancialFinding, NewsFinding
+
+    financial = [
+        FinancialFinding(metric="profit_growth", value=-3.45, unit="percent_yoy", period="2025",
+                         source="FMP", interpretation="down", healthy=False),
+    ]
+    news = [NewsFinding(headline="Margin pressure from higher input costs", summary="s",
+                        source_url="https://e.com", published_date="2026-08-01",
+                        relevance="high", checklist_question="risk")]
+    explanation = explain_consistency(financial, news)
+    assert explanation is not None
+    assert "consistent" in explanation.lower()
+
+
+def test_explain_consistency_returns_none_when_profit_is_healthy():
+    from investpanel.models.findings import FinancialFinding
+
+    financial = [
+        FinancialFinding(metric="profit_growth", value=10.0, unit="percent_yoy", period="2025",
+                         source="FMP", interpretation="up", healthy=True),
+    ]
+    assert explain_consistency(financial, []) is None
 
 
 def test_news_agent_only_keeps_fetchable_dated_articles(monkeypatch):

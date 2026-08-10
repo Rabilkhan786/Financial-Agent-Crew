@@ -99,3 +99,17 @@ HEALTHY_PEG_MAX = 1.5              # valuation reasonable vs growth (PEG-like)
 # --- Risk thresholds ---------------------------------------------------------
 # Annualized volatility above this is flagged as "elevated" by the Risk agent.
 HIGH_VOLATILITY_THRESHOLD = 0.40
+# Max drawdown deeper than this (as a positive fraction, e.g. 0.25 = -25%) is
+# flagged as a notable historical downside in the report's risk summary.
+CONCERNING_DRAWDOWN_THRESHOLD = 0.25
+
+# --- Report presentation thresholds -------------------------------------------
+# Deterministic rules for the report's "Evidence Quality" section — how many
+# sourced findings we actually got back, not an LLM's opinion of confidence.
+# The financial checklist has up to 10 computable metrics (Q2-Q6, Q10 sub-parts).
+EVIDENCE_HIGH_FINANCIAL_METRICS = 7   # most of the 10 metrics computed -> High
+EVIDENCE_MEDIUM_FINANCIAL_METRICS = 3  # a handful computed -> Medium, else Low
+EVIDENCE_HIGH_NEWS_ARTICLES = 3       # 3+ sourced articles -> High
+EVIDENCE_MEDIUM_NEWS_ARTICLES = 1     # 1-2 -> Medium, 0 -> Insufficient
+EVIDENCE_HIGH_PRICE_DAYS = 60         # 60+ trading days of price history -> High
+EVIDENCE_HIGH_PEER_COUNT = 2          # 2+ peers with data on a metric -> High

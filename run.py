@@ -12,6 +12,12 @@ import sys
 
 from investpanel.graph.workflow import run_panel
 from investpanel.models.report import Report
+from investpanel.utils.report_analysis import (
+    build_executive_summary,
+    build_human_checklist,
+    data_freshness,
+    evidence_quality,
+)
 
 # Force UTF-8 console output so special characters in headlines/summaries don't
 # crash printing on Windows.
@@ -20,21 +26,37 @@ if hasattr(sys.stdout, "reconfigure"):
 
 
 def print_report(report: Report) -> None:
-    print(f"\n{'=' * 70}\n  {report.company}\n{'=' * 70}\n")
+    header = report.company + (f" ({report.ticker})" if report.ticker else "")
+    print(f"\n{'=' * 70}\n  {header}\n{'=' * 70}\n")
+
+    freshness = data_freshness(report)
+    for label, value in freshness.items():
+        print(f"{label}: {value}")
+    quality = evidence_quality(report, report.ticker)
+    print(f"Evidence quality: {quality['Overall']}\n")
+
+    print("Executive Summary:")
+    for category, rating in build_executive_summary(report).items():
+        print(f"  {category}: {rating}")
+    print(f"\nKey Takeaway: {report.summary}\n")
+
     print(f"What it does (Q1): {report.company_description}\n")
-    print(f"Summary: {report.summary}\n")
 
     print("10-question checklist:")
-    print(f"  q1: {report.company_description[:80]}...")
-    for key in [f"q{i}" for i in range(2, 11)]:
-        print(f"  {key}: {report.checklist_answers.get(key, 'insufficient evidence')}")
+    for row in build_human_checklist(report):
+        print(f"  [{row['status']}] {row['question']} -> {row['result']}")
 
     if report.peer_comparison:
         print("\nPeer comparison (metric -> {company: value}):")
         for metric, values in report.peer_comparison.items():
             print(f"  {metric}: {values}")
 
-    print(f"\nContradictions found: {len(report.contradictions_found)} "
+    if report.potential_tensions:
+        print(f"\nPotential tensions: {len(report.potential_tensions)}")
+        for t in report.potential_tensions:
+            print(f"  - {t.between[0]} vs {t.between[1]}: {t.description}")
+
+    print(f"\nConfirmed contradictions: {len(report.contradictions_found)} "
           f"(follow-ups run: {report.contradictions_resolved})")
     for c in report.contradictions_found:
         print(f"  - {c.between[0]} vs {c.between[1]}: {c.description}")

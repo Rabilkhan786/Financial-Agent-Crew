@@ -20,3 +20,16 @@ class Contradiction(BaseModel):
     description: str  # plain-English explanation of the tension
     follow_up_target: Specialist  # the ONE specialist to re-ask
     follow_up_question: str  # a specific question, not "please recheck"
+
+
+class Tension(BaseModel):
+    """A softer signal than a Contradiction: two findings worth a reader's attention
+    (e.g. revenue up while profit is down) that are NOT automatically a genuine
+    disagreement. Tensions never drive the follow-up loop — they exist purely so
+    the report can be honest about "this deserves a second look" without
+    over-claiming a contradiction that isn't really there.
+    """
+
+    between: tuple[Specialist, Specialist]
+    description: str  # the two facts in tension, plainly stated
+    reason: str  # why this is a tension worth noting, not a confirmed conflict

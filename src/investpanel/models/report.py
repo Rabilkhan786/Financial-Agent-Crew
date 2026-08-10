@@ -11,9 +11,11 @@ Two project rules are baked into this file on purpose:
    it's enforced in code, not left to an agent to remember under prompt pressure.
 """
 
+from datetime import UTC, datetime
+
 from pydantic import BaseModel, Field, field_validator
 
-from investpanel.models.contradiction import Contradiction
+from investpanel.models.contradiction import Contradiction, Tension
 from investpanel.models.findings import FinancialFinding, NewsFinding, RiskFinding
 
 # The exact, required disclaimer text. Defined once, here.
@@ -26,6 +28,7 @@ DISCLAIMER_TEXT = (
 
 class Report(BaseModel):
     company: str
+    ticker: str | None = None  # set by the Manager's scope; None if it couldn't be resolved
     company_description: str  # answers Q1, set once by the Manager
     summary: str
 
@@ -42,6 +45,21 @@ class Report(BaseModel):
 
     contradictions_found: list[Contradiction] = Field(default_factory=list)
     contradictions_resolved: int = 0
+
+    # Softer signals — worth a reader's attention but NOT confirmed contradictions
+    # (see models/contradiction.py). Never drives the follow-up loop.
+    potential_tensions: list[Tension] = Field(default_factory=list)
+
+    # Which specialists were actually re-queried by a follow-up round, in the
+    # order it happened. Lets the report say "follow-up executed" truthfully for
+    # a specific contradiction instead of guessing — set by the workflow, which
+    # is the only place that knows what really ran.
+    followup_targets_executed: list[str] = Field(default_factory=list)
+
+    # The date this report was generated — set automatically, not by an agent, so
+    # it's always the true creation time rather than something that could be typed
+    # in wrong or forgotten. Used for the "research date" data-freshness line.
+    generated_at: str = Field(default_factory=lambda: datetime.now(UTC).date().isoformat())
 
     # frozen=True stops anyone editing it after the report is built.
     disclaimer: str = Field(default=DISCLAIMER_TEXT, frozen=True)
