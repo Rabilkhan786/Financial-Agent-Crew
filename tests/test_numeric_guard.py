@@ -94,6 +94,27 @@ def test_numbers_quoted_from_a_finding_sentence_are_allowed():
     assert "100-day" in summary  # kept, not discarded
 
 
+def test_numbers_from_a_critic_finding_are_allowed():
+    # Regression from a live Intel run: the guard rejected "50%", which came from
+    # the Critic's own "versus a peer average of 50%" — a computed figure.
+    from investpanel.agents.analyst import AnalystAgent
+    from investpanel.models.contradiction import Contradiction
+
+    class QuotingLLM:
+        def invoke(self, prompt):
+            class R:
+                content = "Revenue growth lags a peer average of 50%, which is the main concern."
+            return R()
+
+    contradiction = Contradiction(
+        between=("financial", "news"),
+        description="revenue growth is -0% versus a peer average of 50% — behind its competitors.",
+        follow_up_target="news", follow_up_question="why?",
+    )
+    summary = AnalystAgent(llm=QuotingLLM())._summary("Intel", [], [], [], [contradiction], [])
+    assert "50%" in summary  # kept, not discarded
+
+
 def test_analyst_keeps_a_summary_that_only_uses_real_numbers():
     from investpanel.agents.analyst import AnalystAgent
     from investpanel.models.findings import FinancialFinding

@@ -41,6 +41,7 @@ def get_llm(
             model=model or config.GEMINI_MODEL,
             google_api_key=config.GEMINI_API_KEY,
             temperature=temperature,
+            max_retries=config.LLM_MAX_RETRIES,
         )
 
     if provider == "openai":
@@ -52,6 +53,7 @@ def get_llm(
             model=model or config.OPENAI_MODEL,
             api_key=config.OPENAI_API_KEY,
             temperature=temperature,
+            max_retries=config.LLM_MAX_RETRIES,
         )
 
     if provider == "anthropic":
@@ -63,6 +65,7 @@ def get_llm(
             model=model or config.ANTHROPIC_MODEL,
             api_key=config.ANTHROPIC_API_KEY,
             temperature=temperature,
+            max_retries=config.LLM_MAX_RETRIES,
         )
 
     if provider == "groq":
@@ -74,6 +77,7 @@ def get_llm(
             model=model or config.GROQ_MODEL,
             api_key=config.GROQ_API_KEY,
             temperature=temperature,
+            max_retries=config.LLM_MAX_RETRIES,
         )
 
     if provider == "deepseek":
@@ -87,6 +91,7 @@ def get_llm(
             api_key=config.DEEPSEEK_API_KEY,
             base_url=config.DEEPSEEK_BASE_URL,
             temperature=temperature,
+            max_retries=config.LLM_MAX_RETRIES,
         )
 
     if provider == "openrouter":
@@ -100,6 +105,7 @@ def get_llm(
             api_key=config.OPENROUTER_API_KEY,
             base_url=config.OPENROUTER_BASE_URL,
             temperature=temperature,
+            max_retries=config.LLM_MAX_RETRIES,
         )
 
     raise ValueError(

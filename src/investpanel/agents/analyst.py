@@ -95,9 +95,17 @@ def detect_contradictions(
 
     # Detector 3: valuation looks cheap while some fundamentals are weak AND volatility
     # is elevated — the classic value-trap pattern. Ask Risk to quantify the downside.
+    # A negative P/E means the company is loss-making, not that the shares are
+    # cheap or expensive — the ratio simply has no valuation meaning. Reading it as
+    # a number produced two opposite verdicts on the same company (Intel was called
+    # both "looks cheap" and "is rich" in one run), so it's excluded here.
+    pe_finding = by_metric.get("pe_ratio")
+    pe_is_meaningful = pe_finding is not None and pe_finding.value > 0
+
+    peg = by_metric.get("valuation_vs_growth")
     valuation_cheap = (
-        (by_metric.get("valuation_vs_growth") and by_metric["valuation_vs_growth"].healthy)
-        or (by_metric.get("pe_ratio") and by_metric["pe_ratio"].healthy)
+        (peg is not None and peg.value > 0 and peg.healthy)
+        or (pe_is_meaningful and pe_finding.healthy)
     )
     if valuation_cheap and high_vol and any_financial_unhealthy:
         contradictions.append(Contradiction(
@@ -119,7 +127,8 @@ def detect_contradictions(
     pe = by_metric.get("pe_ratio")
     profit = by_metric.get("profit_growth")
     revenue = by_metric.get("revenue_growth")
-    expensive = pe is not None and not pe.healthy
+    # Same rule as above: only a positive P/E can be called expensive.
+    expensive = pe_is_meaningful and not pe.healthy
     shrinking = (profit is not None and profit.value < 0) or (revenue is not None and revenue.value < 0)
     if expensive and shrinking:
         contradictions.append(Contradiction(
@@ -214,7 +223,8 @@ def detect_potential_tensions(
         ))
 
     pe = by_metric.get("pe_ratio")
-    if pe is not None and not pe.healthy and profit is not None and profit.healthy:
+    # A negative P/E means loss-making, not "rich" — see detect_contradictions.
+    if pe is not None and pe.value > 0 and not pe.healthy and profit is not None and profit.healthy:
         tensions.append(Tension(
             between=("financial", "financial"),
             description=(
@@ -393,16 +403,20 @@ class AnalystAgent(BaseAgent):
                 "TENSIONS below. Your takeaway MUST acknowledge them rather than "
                 "smoothing them over or ignoring them.\n"
             )
+        # Compact lines instead of full JSON dumps. The model only needs the metric,
+        # its value and the verdict — sending every field (source strings, units,
+        # periods) tripled the prompt and pushed free-tier runs over their
+        # tokens-per-minute cap for no gain in the writing.
         prompt = (
             f"Write a 2-4 sentence 'Key Takeaway' for {company}, synthesizing ONLY the "
             f"validated findings below. Do not state any number that is not already present "
             f"in the findings. Do not give a buy/sell/hold recommendation.\n"
             f"{critic_note}"
-            f"FINANCIAL: {json.dumps([f.model_dump(mode='json') for f in financial])}\n"
-            f"NEWS: {json.dumps([n.model_dump(mode='json') for n in news])}\n"
-            f"RISK: {json.dumps([r.model_dump(mode='json') for r in risk])}\n"
-            f"CONTRADICTIONS: {json.dumps([c.model_dump(mode='json') for c in contradictions])}\n"
-            f"TENSIONS: {json.dumps([t.model_dump(mode='json') for t in (tensions or [])])}\n"
+            f"FINANCIAL:\n{_brief_findings(financial)}\n"
+            f"NEWS:\n{_brief_news(news)}\n"
+            f"RISK:\n{_brief_findings(risk)}\n"
+            f"CONTRADICTIONS:\n{_brief_lines(c.description for c in contradictions)}\n"
+            f"TENSIONS:\n{_brief_lines(t.description for t in (tensions or []))}\n"
         )
         try:
             reply = self._ensure_llm().invoke(prompt)
@@ -420,7 +434,7 @@ class AnalystAgent(BaseAgent):
         # every figure in the prose must trace back to a number Python computed. If
         # the model invented one, we drop the prose entirely rather than publish a
         # fabricated financial figure.
-        allowed = _allowed_numbers(financial, risk)
+        allowed = _allowed_numbers(financial, risk, contradictions, tensions or [])
         clean, offenders = verify_summary(text, allowed)
         if not clean:
             logger.warning(
@@ -431,19 +445,47 @@ class AnalystAgent(BaseAgent):
         return text
 
 
-def _allowed_numbers(financial, risk) -> list[float]:
+def _brief_findings(findings) -> str:
+    """One compact line per finding: metric, value, verdict. Nothing else."""
+    lines = []
+    for f in findings:
+        verdict = ""
+        if hasattr(f, "healthy"):
+            verdict = " (healthy)" if f.healthy else " (concern)"
+        lines.append(f"- {f.metric}: {f.value}{verdict}")
+    return "\n".join(lines) or "- none"
+
+
+def _brief_news(news) -> str:
+    """Headline plus relevance — the summary text isn't needed to write a takeaway."""
+    return "\n".join(f"- {n.headline} ({n.relevance})" for n in news) or "- none"
+
+
+def _brief_lines(descriptions) -> str:
+    return "\n".join(f"- {d}" for d in descriptions) or "- none"
+
+
+def _allowed_numbers(financial, risk, contradictions=(), tensions=()) -> list[float]:
     """Every number the summary may legitimately quote.
 
-    Not just the metric values: the findings' own sentences carry real numbers too
-    ("100-day close series", "versus a 40% threshold"). Those are computed facts the
-    model is entitled to repeat, so leaving them out makes the guard reject good
-    summaries — which is how a safety check quietly becomes a quality problem.
+    Not just the metric values. The findings' own sentences carry real numbers
+    ("100-day close series", "versus a 40% threshold"), and so do the Critic's
+    descriptions ("a peer average of 50%") — all computed by deterministic code,
+    so the model is entitled to repeat them. Leaving them out makes the guard
+    reject good summaries, which is how a safety check quietly becomes a quality
+    problem.
     """
     values = [f.value for f in financial] + [r.value for r in risk]
     for finding in [*financial, *risk]:
         text = " ".join(
             str(getattr(finding, field, "") or "")
             for field in ("interpretation", "computed_from", "period", "source")
+        )
+        values.extend(extract_numbers(text))
+    for item in [*contradictions, *tensions]:
+        text = " ".join(
+            str(getattr(item, field, "") or "")
+            for field in ("description", "reason", "follow_up_question")
         )
         values.extend(extract_numbers(text))
     return values

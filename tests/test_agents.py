@@ -106,6 +106,19 @@ def test_compute_findings_skips_what_it_cannot_compute():
     assert "cash_conversion" not in metrics  # needs the cash-flow statement
 
 
+def test_peg_is_not_computed_for_a_loss_making_company():
+    # A negative P/E divided by growth gives a negative PEG, which would score as
+    # "cheap". The metric doesn't apply to a loss-maker, so it must be absent.
+    income = [
+        {"calendarYear": "2025", "revenue": 1000, "netIncome": 50, "operatingIncome": -10},
+        {"calendarYear": "2024", "revenue": 1000, "netIncome": 25, "operatingIncome": -20},
+    ]
+    ratios = {"peRatioTTM": -48.0}
+    metrics = {f.metric for f in compute_findings(income, [], [], ratios, source="FMP test")}
+    assert "pe_ratio" in metrics              # the P/E itself is still reported
+    assert "valuation_vs_growth" not in metrics  # but PEG is not invented from it
+
+
 def test_compute_findings_returns_nothing_without_revenue():
     # No revenue -> margins are undefined, and we skip rather than divide by zero.
     income = [{"calendarYear": "2023", "netIncome": 10}]
@@ -231,6 +244,50 @@ def test_analyst_no_contradiction_when_expensive_but_growing():
                          period="2025", source="FMP", interpretation="growing", healthy=True),
     ]
     assert detect_contradictions(financial, [], []) == []
+
+
+def test_a_negative_pe_is_neither_cheap_nor_rich():
+    # Regression from a live Intel run: P/E -48 (loss-making) was read numerically,
+    # so the same company was called BOTH "looks cheap" and "is rich" in one report.
+    from investpanel.models.findings import FinancialFinding, RiskFinding
+
+    financial = [
+        FinancialFinding(metric="pe_ratio", value=-48.18, unit="ratio", period="TTM",
+                         source="FMP", interpretation="negative", healthy=False),
+        FinancialFinding(metric="revenue_growth", value=-0.47, unit="percent_yoy", period="2025",
+                         source="FMP", interpretation="flat", healthy=False),
+    ]
+    risk = [RiskFinding(metric="annualized_volatility", value=0.93,
+                        computed_from="100-day close series, AV", interpretation="high")]
+
+    descriptions = " ".join(c.description for c in detect_contradictions(financial, [], risk))
+    assert "looks cheap" not in descriptions
+    assert "Valuation is rich" not in descriptions
+
+
+def test_a_positive_pe_is_still_judged_normally():
+    # The negative-P/E guard must not disable the detector for real valuations.
+    from investpanel.models.findings import FinancialFinding
+
+    financial = [
+        FinancialFinding(metric="pe_ratio", value=278.0, unit="ratio", period="TTM",
+                         source="FMP", interpretation="expensive", healthy=False),
+        FinancialFinding(metric="profit_growth", value=-46.8, unit="percent_yoy", period="2025",
+                         source="FMP", interpretation="falling", healthy=False),
+    ]
+    assert any("Valuation is rich" in c.description for c in detect_contradictions(financial, [], []))
+
+
+def test_no_rich_valuation_tension_for_a_negative_pe():
+    from investpanel.models.findings import FinancialFinding
+
+    financial = [
+        FinancialFinding(metric="pe_ratio", value=-48.0, unit="ratio", period="TTM",
+                         source="FMP", interpretation="negative", healthy=False),
+        FinancialFinding(metric="profit_growth", value=98.6, unit="percent_yoy", period="2025",
+                         source="FMP", interpretation="up", healthy=True),
+    ]
+    assert not any("rich" in t.description.lower() for t in detect_potential_tensions(financial, [], []))
 
 
 def test_potential_tension_for_revenue_up_profit_down_not_a_contradiction():

@@ -271,11 +271,22 @@ with research_tab:
                 # Imported here so the app loads even before keys are set.
                 from investpanel.graph.workflow import run_panel
 
-                report = run_panel(question)
-                _render_report(report)
+                # Keep the result in session state, not in a local variable. Streamlit
+                # re-runs this whole script on ANY interaction (switching tabs, a code
+                # change, a widget click) — rendering inside the button branch meant a
+                # finished report vanished off the screen the moment anything happened.
+                st.session_state["report"] = run_panel(question)
+                st.session_state.pop("run_error", None)
             except Exception as error:  # noqa: BLE001 - show any run error to the user, don't crash the app
-                st.error(f"Could not complete the run: {error}")
-                st.info("Check that all four API keys are set in your .env file.")
+                st.session_state["run_error"] = str(error)
+                st.session_state.pop("report", None)
+
+    if st.session_state.get("run_error"):
+        st.error(f"Could not complete the run: {st.session_state['run_error']}")
+        st.info("Check that all four API keys are set in your .env file. A rate-limit "
+                "message here means the free LLM tier is throttling — wait and retry.")
+    elif st.session_state.get("report") is not None:
+        _render_report(st.session_state["report"])
 
 
 with obs_tab:

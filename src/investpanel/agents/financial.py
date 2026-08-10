@@ -191,9 +191,11 @@ def compute_findings(
             healthy=0 < pb < config.HEALTHY_PB_MAX,
             interpretation=f"Price-to-book is {pb:.1f}x.",
         ))
-    # PEG-like: only meaningful when both P/E and positive profit growth exist.
+    # PEG-like: only meaningful when the P/E is POSITIVE and profit is growing. A
+    # loss-making company has a negative P/E, which divided by growth produces a
+    # negative PEG that would score as "cheap" — the metric simply doesn't apply.
     profit_growth_pct = next((f.value for f in findings if f.metric == "profit_growth"), None)
-    if pe is not None and profit_growth_pct and profit_growth_pct > 0:
+    if pe is not None and pe > 0 and profit_growth_pct and profit_growth_pct > 0:
         peg = pe / profit_growth_pct
         findings.append(_finding(
             "valuation_vs_growth", peg, "peg", "TTM", source,

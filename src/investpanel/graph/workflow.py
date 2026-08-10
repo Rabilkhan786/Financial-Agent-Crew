@@ -26,6 +26,7 @@ from investpanel.agents.risk import RiskAgent
 from investpanel.graph.routing import route_after_critic, route_after_manager
 from investpanel.graph.state import PanelState
 from investpanel.models.query_plan import QueryPlan
+from investpanel.models.scope import ResearchScope
 from investpanel.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -82,7 +83,21 @@ def build_workflow(panel: Panel):
     """Build and compile the LangGraph workflow for the given panel."""
 
     def manager_node(state: PanelState) -> dict:
-        scope = panel.manager.plan(state["question"])
+        # The manager is the one node whose failure used to kill the whole run: a
+        # transient rate limit here meant the user saw an error instead of a report.
+        # Degrade to a minimal scope built from the question itself so the
+        # specialists can still try, and record why the scope is thin.
+        question = state["question"]
+        try:
+            scope = panel.manager.plan(question)
+        except Exception as error:  # noqa: BLE001 - degrade rather than lose the run
+            logger.warning("Manager could not plan the question: %s", error)
+            return {
+                "scope": ResearchScope(company=question, clarified_question=question),
+                "company_description": "",
+                "rounds": 0,
+                "errors": [f"manager: {error}"],
+            }
         description = panel.manager.company_description(scope.ticker)
         return {"scope": scope, "company_description": description, "rounds": 0}
 

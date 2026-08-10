@@ -41,6 +41,12 @@ LANGSMITH_PROJECT = os.getenv("LANGSMITH_PROJECT", "investpanel")
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "gemini")
 LLM_TEMPERATURE = 0.0  # deterministic-ish: we want analysis, not creative writing
 
+# Free tiers cap tokens-per-minute, and a panel run makes several calls in quick
+# succession — so a 429 here is normal traffic shaping, not a real failure. The
+# provider tells us how long to wait (usually a few seconds), so being patient is
+# far better than surfacing an error the user has to retry by hand.
+LLM_MAX_RETRIES = 6
+
 # Optional: give the ANALYST a stronger model than the specialists (its cross-check
 # is the hard reasoning step). Leave blank to use the same model as everyone else.
 # Same provider, just a different model name — e.g. "openai/gpt-oss-120b" on Groq.
