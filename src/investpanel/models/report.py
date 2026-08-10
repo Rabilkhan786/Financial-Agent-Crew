@@ -45,6 +45,9 @@ class Report(BaseModel):
     query_intent: str | None = None
     routing_reason: str | None = None
     skipped_agents: list[str] = Field(default_factory=list)
+    # Whether this question asked for a peer comparison at all. Without it, an empty
+    # peer table looks like a data failure when it was simply never requested.
+    peers_requested: bool = True
 
     # Keys "q2".."q10": each a short answer + confidence, or "insufficient
     # evidence". This dict is what docs/evaluation.md reports completeness on.

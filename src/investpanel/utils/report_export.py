@@ -18,6 +18,7 @@ from investpanel.utils.report_analysis import (
     contradiction_status,
     crosscheck_conclusion,
     data_freshness,
+    empty_section_note,
     evidence_quality,
     missing_evidence_rows,
     peer_comparison_note,
@@ -81,7 +82,7 @@ def report_to_markdown(report: Report) -> str:
                 f"| {status} | {f.source} |"
             )
     else:
-        lines.append("Insufficient evidence — no financial metrics could be computed.")
+        lines.append(empty_section_note(report, "financial"))
     lines.append("")
 
     # --- Risk analysis ------------------------------------------------------------
@@ -92,7 +93,7 @@ def report_to_markdown(report: Report) -> str:
         for row in risk_rows:
             lines.append(f"- **{row['metric']}:** {row['value']} — {row['interpretation']}")
     else:
-        lines.append("Insufficient evidence — no price history was available.")
+        lines.append(empty_section_note(report, "risk"))
     lines.append("")
 
     # --- News analysis --------------------------------------------------------------
@@ -110,7 +111,7 @@ def report_to_markdown(report: Report) -> str:
         lines.append(f"**Source:** {n.source_url}")
         lines.append("")
     if not report.news_findings:
-        lines.append("Insufficient evidence — no sourced articles were available.")
+        lines.append(empty_section_note(report, "news"))
         lines.append("")
 
     # --- Peer comparison --------------------------------------------------------------

@@ -21,10 +21,22 @@ def _ff(metric, value, healthy=True):
 
 def test_brief_findings_keeps_only_what_the_model_needs():
     line = _brief_findings([_ff("pe_ratio", 19.86)])
-    assert line == "- pe_ratio: 19.86 (healthy)"
+    # Human-formatted, so the model quotes "19.86×" rather than a bare float.
+    assert line == "- P/E Ratio: 19.86× (healthy)"
     # The verbose fields must NOT be in the prompt: they cost tokens and add nothing.
     assert "FMP statements" not in line
     assert "long sentence" not in line
+
+
+def test_brief_findings_formats_a_fraction_as_a_percentage():
+    # Regression: a raw 0.3998 in the prompt produced "volatility of 0.3998" in the
+    # takeaway. The model should see the same string a reader would.
+    from investpanel.models.findings import RiskFinding
+
+    line = _brief_findings([RiskFinding(metric="annualized_volatility", value=0.3998,
+                                         computed_from="100-day close series", interpretation="x")])
+    assert "40.0%" in line
+    assert "0.3998" not in line
 
 
 def test_brief_findings_marks_concerns():

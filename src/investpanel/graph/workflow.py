@@ -190,6 +190,7 @@ def build_workflow(panel: Panel):
             query_intent=plan.intent,
             routing_reason=plan.reasoning,
             skipped_agents=plan.skipped_agents(),
+            peers_requested=plan.needs_peers,
             company=scope.company,
             ticker=scope.ticker,
             question=state.get("question"),

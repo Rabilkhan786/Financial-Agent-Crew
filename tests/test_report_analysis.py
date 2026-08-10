@@ -19,6 +19,7 @@ from investpanel.utils.report_analysis import (
     data_freshness,
     evidence_quality,
     peer_chart_data,
+    peer_comparison_note,
     question_was_rewritten,
 )
 
@@ -236,6 +237,33 @@ def test_failed_agent_still_reads_as_insufficient_evidence():
     rows = {r["question"]: r for r in build_human_checklist(report)}
     moat = rows["Does it have a durable competitive advantage (moat)?"]
     assert moat["status"] == "Insufficient evidence"
+
+
+def test_executive_summary_says_not_requested_for_a_skipped_agent():
+    report = Report(company="Acme", company_description="x", summary="s",
+                     risk_findings=[_rf("annualized_volatility", 0.2)],
+                     query_intent="risk_only", skipped_agents=["financial", "news"])
+    summary = build_executive_summary(report)
+    assert summary["Fundamentals"] == "Not requested"
+    assert summary["News"] == "Not requested"
+    assert summary["Risk"] == "Moderate"          # the one that DID run is judged
+
+
+def test_empty_section_note_distinguishes_skipped_from_failed():
+    from investpanel.utils.report_analysis import empty_section_note
+
+    skipped = Report(company="A", company_description="x", summary="s",
+                      query_intent="risk_only", skipped_agents=["news"])
+    assert "Not requested" in empty_section_note(skipped, "news")
+
+    failed = Report(company="A", company_description="x", summary="s")
+    assert "Insufficient evidence" in empty_section_note(failed, "news")
+
+
+def test_peer_note_says_not_requested_when_peers_were_not_wanted():
+    report = Report(company="A", company_description="x", summary="s",
+                     query_intent="risk_only", peers_requested=False)
+    assert "Not requested" in peer_comparison_note(report)
 
 
 def test_crosscheck_says_not_requested_when_an_agent_was_skipped():

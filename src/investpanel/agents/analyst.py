@@ -24,6 +24,7 @@ from investpanel.models.report import Report
 from investpanel.utils.logging import get_logger
 from investpanel.utils.numeric_guard import extract_numbers, verify_summary
 from investpanel.utils.observations import collect_observations
+from investpanel.utils.report_format import format_metric_label, format_metric_value
 
 logger = get_logger(__name__)
 
@@ -343,6 +344,7 @@ class AnalystAgent(BaseAgent):
         query_intent: str | None = None,
         routing_reason: str | None = None,
         skipped_agents: list[str] | None = None,
+        peers_requested: bool = True,
         tensions: list[Tension] | None = None,
         additional_findings: list[Observation] | None = None,
     ) -> Report:
@@ -355,6 +357,7 @@ class AnalystAgent(BaseAgent):
             query_intent=query_intent,
             routing_reason=routing_reason,
             skipped_agents=skipped_agents or [],
+            peers_requested=peers_requested,
             company_description=company_description or "Description unavailable.",
             summary=self._summary(company, financial, news, risk, contradictions, tensions or []),
             checklist_answers=build_checklist_answers(financial, news, risk),
@@ -446,13 +449,18 @@ class AnalystAgent(BaseAgent):
 
 
 def _brief_findings(findings) -> str:
-    """One compact line per finding: metric, value, verdict. Nothing else."""
+    """One compact line per finding: metric, value, verdict. Nothing else.
+
+    The value is human-formatted ("40.0%", not "0.3998"). Handing the model raw
+    floats made it quote them verbatim — a takeaway reading "volatility of 0.3998"
+    is technically true and useless to a reader.
+    """
     lines = []
     for f in findings:
         verdict = ""
         if hasattr(f, "healthy"):
             verdict = " (healthy)" if f.healthy else " (concern)"
-        lines.append(f"- {f.metric}: {f.value}{verdict}")
+        lines.append(f"- {format_metric_label(f.metric)}: {format_metric_value(f.metric, f.value)}{verdict}")
     return "\n".join(lines) or "- none"
 
 

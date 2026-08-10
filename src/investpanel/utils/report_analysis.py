@@ -101,17 +101,28 @@ def classify_news(news: list[NewsFinding]) -> str:
     return "No major concerns flagged"
 
 
+NOT_REQUESTED = "Not requested"
+
+
 def build_executive_summary(report: Report) -> dict[str, str]:
     """The category ratings shown at the top of the report — every value here
-    is one of the classify_* functions above, so it's fully reproducible."""
-    return {
-        "Fundamentals": classify_fundamentals(report.financial_findings),
-        "Growth": classify_growth(report.financial_findings),
-        "Profitability": classify_profitability(report.financial_findings),
-        "Valuation": classify_valuation(report.financial_findings),
-        "Risk": classify_risk(report.risk_findings),
-        "News": classify_news(report.news_findings),
+    is one of the classify_* functions above, so it's fully reproducible.
+
+    A category whose agent the Query Analyzer never dispatched reads "Not
+    requested". Saying "Insufficient evidence" there would claim we looked and
+    failed, when in fact the question didn't call for it.
+    """
+    skipped = set(report.skipped_agents)
+    financial_label = NOT_REQUESTED if "financial" in skipped else None
+    summary = {
+        "Fundamentals": financial_label or classify_fundamentals(report.financial_findings),
+        "Growth": financial_label or classify_growth(report.financial_findings),
+        "Profitability": financial_label or classify_profitability(report.financial_findings),
+        "Valuation": financial_label or classify_valuation(report.financial_findings),
+        "Risk": NOT_REQUESTED if "risk" in skipped else classify_risk(report.risk_findings),
+        "News": NOT_REQUESTED if "news" in skipped else classify_news(report.news_findings),
     }
+    return summary
 
 
 # --- Evidence quality ----------------------------------------------------------
@@ -170,20 +181,22 @@ def evidence_quality(report: Report, target_ticker: str | None = None) -> dict[s
     Peer data is supplementary to the checklist, so it's reported but doesn't
     drag the overall rating down on its own.
     """
+    # An agent this question never asked for must not drag the rating down, and must
+    # not be labelled a failure: a risk-only run that answered the risk question fully
+    # is High-quality evidence for what was actually asked.
+    skipped = {name.capitalize() for name in report.skipped_agents}
     per_source = {
         "Financial": _financial_quality(report.financial_findings),
         "News": _news_quality(report.news_findings),
         "Risk": _risk_quality(report.risk_findings),
         "Peer comparison": _peer_quality(report.peer_comparison, target_ticker),
     }
-    # An agent this question never asked for must not drag the rating down: a
-    # risk-only run that answered the risk question fully is High-quality evidence
-    # for what was actually asked, not "Insufficient" because there's no news.
-    skipped = {name.capitalize() for name in report.skipped_agents}
     considered = [
         quality for source, quality in per_source.items()
         if source in ("Financial", "News", "Risk") and source not in skipped
     ]
+    for source in skipped & set(per_source):
+        per_source[source] = NOT_REQUESTED
     per_source["Overall"] = (
         min(considered, key=lambda label: _QUALITY_RANK[label]) if considered else "Insufficient"
     )
@@ -458,6 +471,23 @@ def build_human_checklist(report: Report) -> list[dict[str, str]]:
     return rows
 
 
+def empty_section_note(report: Report, agent: str) -> str:
+    """The line to show where a section has no content.
+
+    One place, so the app and the Markdown export can't drift into telling the
+    reader two different stories about the same absent section.
+    """
+    if agent in report.skipped_agents:
+        intent = (report.query_intent or "this question").replace("_", " ")
+        return f"Not requested — {intent} does not need the {agent} agent, so it was not run."
+    failures = {
+        "financial": "Insufficient evidence — no financial metrics could be computed.",
+        "news": "Insufficient evidence — no sourced articles were available.",
+        "risk": "Insufficient evidence — no usable price history was available.",
+    }
+    return failures[agent]
+
+
 def missing_evidence_rows(report: Report) -> list[dict[str, str]]:
     """Checklist rows that came back without data, each with a specific reason.
 
@@ -471,9 +501,12 @@ def missing_evidence_rows(report: Report) -> list[dict[str, str]]:
 def peer_comparison_note(report: Report) -> str | None:
     """Why the peer comparison table is empty or partial, or None if it's fine.
 
-    Distinguishes "nothing at all" from "only the target company itself" so the
-    report never silently shows a table with just one column and no explanation.
+    Distinguishes three cases that would otherwise look identical: never asked
+    for, asked for but nothing came back, and only the target's own numbers.
     """
+    if not report.peers_requested:
+        intent = (report.query_intent or "this question").replace("_", " ")
+        return f"Not requested — {intent} does not call for a peer comparison, so none was run."
     if not report.peer_comparison:
         return (
             "No competitor financial data could be retrieved — competitors may not be "

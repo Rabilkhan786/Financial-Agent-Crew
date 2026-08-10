@@ -31,6 +31,7 @@ from investpanel.utils.report_analysis import (
     contradiction_status,
     crosscheck_conclusion,
     data_freshness,
+    empty_section_note,
     evidence_quality,
     missing_evidence_rows,
     peer_chart_data,
@@ -116,7 +117,7 @@ def _render_report(report) -> None:
                 width="stretch", hide_index=True,
             )
         else:
-            st.write("Insufficient evidence — no financial metrics could be computed.")
+            st.write(empty_section_note(report, "financial"))
 
     # --- Risk analysis -----------------------------------------------------------------
     st.subheader("Risk Analysis")
@@ -128,7 +129,7 @@ def _render_report(report) -> None:
         for row in risk_rows:
             st.caption(f"**{row['metric']}:** {row['interpretation']} (from {row['computed_from']})")
     else:
-        st.write("Insufficient evidence — no price history was available.")
+        st.write(empty_section_note(report, "risk"))
 
     # The price series the risk numbers were computed from — shown so the reader can
     # see the volatility and drawdown rather than just being told the figures.
@@ -151,7 +152,7 @@ def _render_report(report) -> None:
                 st.markdown(f"**Published:** {n.published_date.isoformat()}")
                 st.markdown(f"**Source:** [{n.source_url}]({n.source_url})")
     else:
-        st.write("Insufficient evidence — no sourced articles were available.")
+        st.write(empty_section_note(report, "news"))
 
     # --- Peer comparison -----------------------------------------------------------------
     st.subheader("Peer Comparison")
