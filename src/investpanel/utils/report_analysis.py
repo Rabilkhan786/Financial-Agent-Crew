@@ -216,19 +216,58 @@ def data_freshness(report: Report) -> dict[str, str]:
 
 # --- Peer comparison table ------------------------------------------------------
 
-def build_peer_table(peer_comparison: dict[str, dict[str, float]]) -> list[dict[str, str]]:
-    """Turn {metric: {ticker: value}} into a list of display rows, one per
-    metric, with every value pre-formatted. Only metrics that actually have
-    data appear — no fabricated blank cells."""
+def build_peer_table(
+    peer_comparison: dict[str, dict[str, float]],
+    target_ticker: str | None = None,
+) -> list[dict[str, str]]:
+    """Turn {metric: {ticker: value}} into display rows, one per metric.
+
+    Rows follow the same order as the checklist so the comparison reads like the
+    rest of the report, and a "vs peers" column says whether the target is above
+    or below the peer average — the thing a reader actually wants to know, and a
+    plain average rather than an LLM's impression.
+    """
+    target = (target_ticker or "").upper()
+    ordered = [m for m in _METRIC_ORDER if m in peer_comparison]
+    ordered += [m for m in peer_comparison if m not in ordered]  # anything unexpected, last
+
     rows = []
-    for metric, values in peer_comparison.items():
+    for metric in ordered:
+        values = peer_comparison.get(metric) or {}
         if not values:
             continue
         row = {"Metric": _metric_label(metric)}
         for ticker, value in values.items():
             row[ticker] = format_metric_value(metric, value)
+        row["vs peers"] = _versus_peers(metric, values, target)
         rows.append(row)
     return rows
+
+
+# Metrics where a LOWER number is the better outcome, so "above the peer average"
+# is not automatically good news.
+_LOWER_IS_BETTER = {"debt_to_equity", "pe_ratio", "pb_ratio", "valuation_vs_growth"}
+
+
+def _versus_peers(metric: str, values: dict[str, float], target: str) -> str:
+    """Where the target sits against the average of its peers, in plain words."""
+    if target not in values:
+        return "—"
+    peers = [v for ticker, v in values.items() if ticker != target]
+    if not peers:
+        return "no peer data"
+
+    target_value = values[target]
+    average = sum(peers) / len(peers)
+    if average == 0:
+        return "—"
+
+    higher = target_value > average
+    # "Better" depends on the metric: a high P/E is not a win.
+    better = (not higher) if metric in _LOWER_IS_BETTER else higher
+    direction = "above" if higher else "below"
+    gap = abs(target_value - average) / abs(average) * 100
+    return f"{direction} peer avg by {gap:.0f}% ({'favourable' if better else 'unfavourable'})"
 
 
 def _metric_label(metric: str) -> str:

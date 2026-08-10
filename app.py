@@ -155,7 +155,7 @@ def _render_report(report) -> None:
 
     # --- Peer comparison -----------------------------------------------------------------
     st.subheader("Peer Comparison")
-    peer_rows = build_peer_table(report.peer_comparison)
+    peer_rows = build_peer_table(report.peer_comparison, report.ticker)
     note = peer_comparison_note(report)
     if peer_rows:
         columns = sorted({k for row in peer_rows for k in row if k != "Metric"})

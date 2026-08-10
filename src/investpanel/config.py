@@ -79,6 +79,10 @@ MAX_RETRIES = 3               # how many times to retry a failed HTTP call
 RETRY_BACKOFF_SECONDS = 2.0   # base wait between retries (grows each attempt)
 CACHE_TTL_SECONDS = 60 * 60 * 24 * 7  # cache every response for one week
 
+# How many verified competitors to compare against. Three keeps the side-by-side
+# table readable and the API cost bounded (each peer is four more FMP calls).
+MAX_COMPETITORS = 3
+
 # --- Agent workflow bounds ---------------------------------------------------
 # Hard rule: the analyst may loop back to a specialist at most twice. This bound
 # lives here so it is impossible to accidentally change it inside the agent code.

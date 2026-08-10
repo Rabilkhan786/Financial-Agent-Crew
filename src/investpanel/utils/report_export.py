@@ -116,7 +116,7 @@ def report_to_markdown(report: Report) -> str:
     # --- Peer comparison --------------------------------------------------------------
     lines.append("## Peer comparison")
     lines.append("")
-    peer_rows = build_peer_table(report.peer_comparison)
+    peer_rows = build_peer_table(report.peer_comparison, report.ticker)
     note = peer_comparison_note(report)
     if peer_rows:
         columns = sorted({k for row in peer_rows for k in row if k != "Metric"})

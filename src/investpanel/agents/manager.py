@@ -9,6 +9,7 @@ Pydantic contract the rest of the panel consumes.
 
 import json
 
+from investpanel import config
 from investpanel.agents.base import BaseAgent
 from investpanel.models.scope import ResearchScope
 from investpanel.tools import fmp_client, search
@@ -214,10 +215,15 @@ class ManagerAgent(BaseAgent):
             return False
 
     def _find_competitors(self, company: str) -> list[str]:
-        """Find competitors via a real search, then extract names from the results.
+        """Find competitors via a real search, then verify each one is a real ticker.
 
         Grounding this in fetched search text (not the model's memory) is what makes
         the peer list defensible — the spec's "found via search, never guessed" rule.
+
+        The verification step matters as much as the search: the model hands back
+        ticker guesses, and an unresolvable symbol silently drops out of the peer
+        table later, leaving a comparison that looks thin for no visible reason.
+        Each candidate goes through the same resolve_ticker path as the target.
         """
         raw = search.search_news(f"{company} main competitors and industry peers", max_results=5)
         results = raw.get("results", [])
@@ -226,9 +232,22 @@ class ManagerAgent(BaseAgent):
         data = self.invoke_json(
             COMPETITORS_PROMPT.format(company=company, results=json.dumps(results, indent=2))
         )
-        competitors = data.get("competitors", [])[:3]
-        # Prefer the ticker (the Financial agent needs it); fall back to the name.
-        return [(c.get("ticker") or c.get("name")) for c in competitors if c.get("ticker") or c.get("name")]
+
+        resolved: list[str] = []
+        for candidate in data.get("competitors", []):
+            name, guessed = candidate.get("name"), (candidate.get("ticker") or "").upper() or None
+            if not (name or guessed):
+                continue
+            ticker = self.resolve_ticker(name or guessed, guessed)
+            # Only keep peers we can actually pull numbers for, and never the
+            # target itself masquerading as its own competitor.
+            if ticker and self._ticker_exists(ticker) and ticker not in resolved:
+                resolved.append(ticker)
+            else:
+                logger.info("Dropping unverifiable competitor %r (%s)", name, guessed)
+            if len(resolved) >= config.MAX_COMPETITORS:
+                break
+        return resolved
 
     def company_description(self, ticker: str | None) -> str:
         """Company description for checklist Q1, taken from FMP's profile (a source)."""
