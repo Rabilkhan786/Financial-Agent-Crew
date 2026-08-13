@@ -84,7 +84,7 @@ Docker uses the same `requirements.txt` via uv, so container and laptop match.
 3. [x] `tools/kpi.py` + `tests/test_kpi.py` — tests passing
 4. [x] `tools/statements.py`, `tools/market_data.py`, `cache.py`, `news.py`, `social.py`,
        plus `config.py` and logging (verified live on AAPL and TATAELXSI.NS)
-5. [ ] `state.py`, `llm.py`
+5. [x] `state.py`, `llm.py`
 6. [ ] `fundamentals_analyst` standalone — confirm output before wiring the graph
 7. [ ] remaining four agents
 8. [ ] `graph.py`
@@ -95,8 +95,11 @@ Docker uses the same `requirements.txt` via uv, so container and laptop match.
 
 ## Code style
 
-The person maintaining this code is early-career and must be able to explain every line
-in an interview. Plain, explicit code over clever abstractions. Short functions that do
+The person maintaining this code is at the 0-1 year mark and must be able to explain
+every line in an interview. Write it the way they would: plain, short, obvious.
+No clever abstractions, no metaprogramming, no deep class hierarchies, no one-liners
+that need a second read. If there is a simple way and a "proper enterprise" way, use
+the simple way. Plain, explicit code over clever abstractions. Short functions that do
 one obvious thing. Type hints and tests stay. Comment the "why" wherever the code enforces
 a rule above (the loop cap, the no-LLM-arithmetic boundary, the disclaimer).
 
