@@ -34,8 +34,15 @@ force-accepts. `graph.invoke` is called with `recursion_limit=25`.
    interprets numbers it is handed.
 2. `src/agents/report_writer.py` imports nothing from `src/tools/`. It reads state and writes.
 3. Red flags are deterministic rules in `ratios.py`, not LLM opinion.
-4. Reddit (`src/tools/social.py`) is optional. Missing keys -> the app still runs. Fewer
-   than 5 posts -> `social_sentiment = "insufficient data"`, set before the LLM sees anything.
+4. Social sentiment (`src/tools/social.py`) is optional. Missing keys -> the app still
+   runs. Fewer than 5 posts -> `social_sentiment = "insufficient data"`, set before the
+   LLM sees anything.
+   **Two backends behind one function** (user decision, 2026-08-13): praw/Reddit when
+   `REDDIT_CLIENT_ID` and `REDDIT_CLIENT_SECRET` are set, otherwise keyless StockTwits.
+   Reddit commercial API approval takes weeks; keyless Reddit JSON is 403 everywhere,
+   verified. StockTwits returns 200 with no key and its posts carry self-declared
+   Bullish/Bearish tags, so sentiment is counted rather than inferred. Either backend
+   failing degrades to "insufficient data" — it never breaks a run.
 5. Missing statement data (common for Indian smallcaps) is reported as unavailable,
    never inferred by the LLM.
 6. `src/cache.py` from the start — disk cache keyed by ticker+date for yfinance, news, Reddit.
