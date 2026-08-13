@@ -18,22 +18,19 @@ from __future__ import annotations
 
 import datetime as dt
 import json
-import os
 import urllib.error
 import urllib.request
 
-from dotenv import load_dotenv
+from src import cache, config
 
-from src import cache
-
-load_dotenv()
+log = config.get_logger(__name__)
 
 # Where retail investors actually discuss individual stocks.
 SUBREDDITS = ["stocks", "investing", "StockMarket", "wallstreetbets", "IndianStockMarket"]
 
-MIN_POSTS = 5                 # below this, the answer is "insufficient data"
-DEFAULT_LIMIT = 50
-CACHE_MAX_AGE_HOURS = 6.0     # chatter goes stale quickly, statements do not
+MIN_POSTS = config.MIN_SOCIAL_POSTS       # below this, the answer is "insufficient data"
+DEFAULT_LIMIT = config.SOCIAL_LIMIT
+CACHE_MAX_AGE_HOURS = config.CACHE_HOURS_SOCIAL
 REQUEST_TIMEOUT = 20
 STOCKTWITS_URL = "https://api.stocktwits.com/api/2/streams/symbol/{symbol}.json"
 USER_AGENT = "financial-analysis-crew/0.1"
@@ -43,12 +40,10 @@ INSUFFICIENT = "insufficient data"
 
 def _reddit_credentials() -> tuple[str, str, str] | None:
     """The three Reddit values, or None if the user has not set them up."""
-    client_id = os.getenv("REDDIT_CLIENT_ID", "").strip()
-    client_secret = os.getenv("REDDIT_CLIENT_SECRET", "").strip()
-    user_agent = os.getenv("REDDIT_USER_AGENT", "").strip() or USER_AGENT
-    if not client_id or not client_secret:
+    if not config.HAS_REDDIT:
         return None
-    return client_id, client_secret, user_agent
+    return (config.REDDIT_CLIENT_ID, config.REDDIT_CLIENT_SECRET,
+            config.REDDIT_USER_AGENT or USER_AGENT)
 
 
 def _fetch_reddit(ticker: str, company: str | None, limit: int) -> list[dict]:
@@ -158,10 +153,13 @@ def fetch_social_posts(ticker: str, company: str | None = None,
     # weak signal, it is no signal. The posts are dropped so the model cannot
     # read a mood into three anonymous messages.
     if len(posts) < MIN_POSTS:
+        log.info("%s: only %d posts from %s (need %d) - reporting insufficient data",
+                 ticker, len(posts), source, MIN_POSTS)
         return {"source": source, "posts": [], "post_count": len(posts),
                 "tally": _tally(posts), "social_sentiment": INSUFFICIENT,
                 "error": raw.get("error")}
 
+    log.info("%s: %d posts from %s, tally=%s", ticker, len(posts), source, _tally(posts))
     return {"source": source, "posts": posts, "post_count": len(posts),
             "tally": _tally(posts), "social_sentiment": _describe(posts, source),
             "error": raw.get("error")}

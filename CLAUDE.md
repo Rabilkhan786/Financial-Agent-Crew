@@ -56,7 +56,7 @@ force-accepts. `graph.invoke` is called with `recursion_limit=25`.
 
 ```
 app.py  requirements.txt  Dockerfile  .dockerignore  .env.example  .gitignore  README.md
-src/{state,llm,graph,charts,report_pdf,cache}.py
+src/{config,state,llm,graph,charts,report_pdf,cache}.py
 src/agents/{orchestrator,market_researcher,fundamentals_analyst,data_analyst,report_writer}.py
 src/tools/{market_data,statements,ratios,kpi,news,social}.py
 tests/{test_ratios,test_kpi}.py
@@ -80,9 +80,10 @@ Docker uses the same `requirements.txt` via uv, so container and laptop match.
 ## Build order — stop and confirm after each step
 
 1. [x] Delete old files, set up folder structure  (+ Dockerfile, uv env, deps installed)
-2. [ ] `tools/ratios.py` + `tests/test_ratios.py` — tests passing
-3. [ ] `tools/kpi.py` + `tests/test_kpi.py` — tests passing
-4. [ ] `tools/statements.py`, `tools/market_data.py`, `cache.py`
+2. [x] `tools/ratios.py` + `tests/test_ratios.py` — tests passing
+3. [x] `tools/kpi.py` + `tests/test_kpi.py` — tests passing
+4. [x] `tools/statements.py`, `tools/market_data.py`, `cache.py`, `news.py`, `social.py`,
+       plus `config.py` and logging (verified live on AAPL and TATAELXSI.NS)
 5. [ ] `state.py`, `llm.py`
 6. [ ] `fundamentals_analyst` standalone — confirm output before wiring the graph
 7. [ ] remaining four agents
@@ -100,6 +101,27 @@ one obvious thing. Type hints and tests stay. Comment the "why" wherever the cod
 a rule above (the loop cap, the no-LLM-arithmetic boundary, the disclaimer).
 
 Explain each file to the user in 2-4 sentences of plain English as it is created.
+
+## What was learned live (do not re-discover)
+
+* **Gemini 2.5 models are blocked for this key** — `gemini-2.5-flash` returns 404
+  "no longer available to new users". Working models: `gemini-3.5-flash` (default,
+  ~1.5s), `gemini-3.6-flash`, `gemini-3.1-flash-lite`, `gemini-flash-latest`.
+  3.6 ignores the temperature setting; 3.5 respects it, which is why 3.5 is default.
+* **Gemini returns `message.content` as a LIST of blocks, not a string.** `llm.py`
+  must normalise it to text, or every downstream `.strip()` breaks.
+* **Finnhub free plans 403 on Indian tickers** — `news.py` catches that and falls
+  back to Yahoo. Do not "fix" the fallback by only checking for an empty list.
+* **StockTwits 404/403s on `.NS` tickers** — expected; yields "insufficient data".
+* **Yahoo row labels are consistent across US and Indian listings** ("Total Revenue",
+  "Stockholders Equity", "Capital Expenditure"), so `FIELD_MAP` in statements.py works
+  for both. TATAELXSI.NS gives 12 of 12 fields across 5 years.
+
+## Logging
+
+`config.get_logger(__name__)` in every module. Console plus `output/run.log`.
+Every fetch, cache hit, fallback and skipped agent is logged — during a multi-agent
+run the log is the only way to see who asked for what, in which order.
 
 ## Keys
 

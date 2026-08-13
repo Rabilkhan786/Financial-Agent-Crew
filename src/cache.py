@@ -18,7 +18,11 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-CACHE_DIR = Path(".cache")
+from src import config
+
+log = config.get_logger(__name__)
+
+CACHE_DIR = config.CACHE_DIR
 DEFAULT_MAX_AGE_HOURS = 24.0
 
 
@@ -81,15 +85,20 @@ def cached(namespace: str, key: str, producer: Callable[[], Any],
     """
     hit, value = load(namespace, key, max_age_hours)
     if hit:
+        log.debug("cache hit  %s/%s", namespace, key)
         return value
 
+    log.info("fetching   %s/%s", namespace, key)
     try:
         fresh = producer()
-    except Exception:
+    except Exception as error:
         if use_stale_on_failure:
             stale_hit, stale_value = load(namespace, key, max_age_hours=float("inf"))
             if stale_hit:
+                log.warning("fetch failed for %s/%s (%s) - using the stale cached copy",
+                            namespace, key, error)
                 return stale_value
+        log.error("fetch failed for %s/%s: %s", namespace, key, error)
         raise
 
     save(namespace, key, fresh)
