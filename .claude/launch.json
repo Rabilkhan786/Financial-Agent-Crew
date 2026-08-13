@@ -2,9 +2,9 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "investpanel-streamlit",
-      "runtimeExecutable": "uv",
-      "runtimeArgs": ["run", "streamlit", "run", "app.py", "--server.headless=true"],
+      "name": "crew-streamlit",
+      "runtimeExecutable": ".venv/Scripts/streamlit.exe",
+      "runtimeArgs": ["run", "app.py", "--server.headless=true"],
       "port": 8501
     }
   ]

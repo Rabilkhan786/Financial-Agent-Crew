@@ -1,22 +1,17 @@
-# Python-generated files
+# Python
 __pycache__/
 *.py[oc]
-build/
-dist/
-wheels/
-*.egg-info
+.pytest_cache/
 
-# Virtual environments
-.venv
+# Virtual environment
+.venv/
 
-# Secrets — never commit real API keys
+# Secrets — real keys live here and must never be committed
 .env
 
-# Cached API responses and local trace files (regenerated on demand)
-data/cache/
-data/traces/
+# Generated reports and charts
+output/*
+!output/.gitkeep
 
-# Test / tooling caches
-.pytest_cache/
-.ruff_cache/
-.pytest_tmp/
+# Disk cache for yfinance / news / Reddit responses
+.cache/

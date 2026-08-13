@@ -1,11 +1,8 @@
-.venv
 .git
-.gitignore
-data/cache
-data/traces
-.pytest_cache
-.pytest_tmp
-.ruff_cache
+.venv
+.env
+.cache
+output
 __pycache__
 *.pyc
-.env
+.pytest_cache
