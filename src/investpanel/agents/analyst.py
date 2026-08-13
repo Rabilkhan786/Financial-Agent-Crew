@@ -359,7 +359,10 @@ class AnalystAgent(BaseAgent):
             skipped_agents=skipped_agents or [],
             peers_requested=peers_requested,
             company_description=company_description or "Description unavailable.",
-            summary=self._summary(company, financial, news, risk, contradictions, tensions or []),
+            summary=self._summary(
+                company, financial, news, risk, contradictions, tensions or [],
+                asked=interpreted_question or question,
+            ),
             checklist_answers=build_checklist_answers(financial, news, risk),
             peer_comparison=peer_comparison,
             financial_findings=financial,
@@ -383,7 +386,8 @@ class AnalystAgent(BaseAgent):
         self.trace({"company": company, "report_summary": report.summary})
         return report
 
-    def _summary(self, company, financial, news, risk, contradictions, tensions=None) -> str:
+    def _summary(self, company, financial, news, risk, contradictions, tensions=None,
+                 asked=None) -> str:
         """The report's short "Key Takeaway".
 
         Asks the LLM to synthesize the validated findings. If no LLM is reachable
