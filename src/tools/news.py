@@ -14,8 +14,6 @@ It is never estimated by the LLM: a model asked to score tone will happily
 invent a precise-looking number, and a made-up 0.42 is worse than no score.
 """
 
-from __future__ import annotations
-
 import datetime as dt
 import json
 import urllib.parse
@@ -40,7 +38,7 @@ SENTIMENT_BANDS = [(-1.01, -0.35, "bearish"), (-0.35, -0.15, "somewhat bearish")
                    (0.35, 1.01, "bullish")]
 
 
-def _get_json(url: str) -> dict | list:
+def _get_json(url):
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT) as response:
         return json.loads(response.read().decode("utf-8"))
@@ -48,7 +46,7 @@ def _get_json(url: str) -> dict | list:
 
 # --- Backends ---------------------------------------------------------------
 
-def _fetch_yahoo(ticker: str, limit: int) -> list[dict]:
+def _fetch_yahoo(ticker, limit):
     """Yahoo Finance headlines. Handles both the old flat shape and the new
     nested one, because yfinance has changed this response before."""
     import yfinance as yf
@@ -76,7 +74,7 @@ def _fetch_yahoo(ticker: str, limit: int) -> list[dict]:
     return articles[:limit]
 
 
-def _fetch_finnhub(ticker: str, limit: int, days: int, api_key: str) -> list[dict]:
+def _fetch_finnhub(ticker, limit, days, api_key):
     """Company news from Finnhub over the last `days` days."""
     today = dt.date.today()
     query = urllib.parse.urlencode({
@@ -105,14 +103,14 @@ def _fetch_finnhub(ticker: str, limit: int, days: int, api_key: str) -> list[dic
     return articles
 
 
-def _label_for(score: float) -> str:
+def _label_for(score):
     for low, high, label in SENTIMENT_BANDS:
         if low <= score < high:
             return label
     return "neutral"
 
 
-def _fetch_alphavantage_sentiment(ticker: str, api_key: str) -> dict | None:
+def _fetch_alphavantage_sentiment(ticker, api_key):
     """Average news sentiment for a ticker, scored by Alpha Vantage.
 
     Each article carries a relevance score saying how much it is really about
@@ -156,8 +154,7 @@ def _fetch_alphavantage_sentiment(ticker: str, api_key: str) -> dict | None:
 
 # --- One entry point --------------------------------------------------------
 
-def fetch_news(ticker: str, limit: int = DEFAULT_LIMIT, days: int = DEFAULT_DAYS,
-               use_cache: bool = True) -> dict:
+def fetch_news(ticker, limit=DEFAULT_LIMIT, days=DEFAULT_DAYS, use_cache=True):
     """Recent articles about a company, plus a sentiment score when available.
 
     Never raises. A backend that fails leaves an error message and an empty

@@ -12,8 +12,6 @@ common for smaller Indian listings, and a report that admits a gap is worth more
 than one that fills it with a guess.
 """
 
-from __future__ import annotations
-
 import pandas as pd
 import yfinance as yf
 
@@ -52,7 +50,7 @@ FIELD_MAP = {
 DEBT_PARTS = ["Long Term Debt", "Current Debt"]
 
 
-def _row(frames: list[pd.DataFrame], candidates: list[str]) -> pd.Series | None:
+def _row(frames, candidates):
     """The first matching row from whichever statement contains it."""
     for frame in frames:
         if frame is None or frame.empty:
@@ -65,7 +63,7 @@ def _row(frames: list[pd.DataFrame], candidates: list[str]) -> pd.Series | None:
     return None
 
 
-def _rebuild_total_debt(frames: list[pd.DataFrame]) -> pd.Series | None:
+def _rebuild_total_debt(frames):
     """Add up the debt components when Yahoo gives no single total.
 
     This is arithmetic on figures Yahoo did report, not an estimate of a figure
@@ -81,7 +79,7 @@ def _rebuild_total_debt(frames: list[pd.DataFrame]) -> pd.Series | None:
     return total
 
 
-def _fetch_raw(ticker: str) -> dict:
+def _fetch_raw(ticker):
     """The three annual statements plus the profile, straight from Yahoo."""
     handle = yf.Ticker(ticker)
     try:
@@ -96,8 +94,7 @@ def _fetch_raw(ticker: str) -> dict:
     }
 
 
-def fetch_statements(ticker: str, years: int = DEFAULT_YEARS,
-                     use_cache: bool = True) -> dict:
+def fetch_statements(ticker, years=DEFAULT_YEARS, use_cache=True):
     """Annual statements for one company, shaped for `ratios.compute_all`.
 
     Returns the tidy DataFrame (one row per fiscal year, oldest first), the list
@@ -163,7 +160,7 @@ def fetch_statements(ticker: str, years: int = DEFAULT_YEARS,
     }
 
 
-def describe_gaps(result: dict) -> str:
+def describe_gaps(result):
     """One plain sentence about what could not be fetched.
 
     Written here in Python so the report states the gap in fixed words rather

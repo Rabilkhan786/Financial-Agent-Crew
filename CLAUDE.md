@@ -85,13 +85,13 @@ Docker uses the same `requirements.txt` via uv, so container and laptop match.
 4. [x] `tools/statements.py`, `tools/market_data.py`, `cache.py`, `news.py`, `social.py`,
        plus `config.py` and logging (verified live on AAPL and TATAELXSI.NS)
 5. [x] `state.py`, `llm.py`
-6. [ ] `fundamentals_analyst` standalone — confirm output before wiring the graph
-7. [ ] remaining four agents
-8. [ ] `graph.py`
-9. [ ] `charts.py`, `report_pdf.py`
-10. [ ] `app.py`
-11. [ ] `evals/run_eval.py` — 10 tickers, three rule checks
-12. [ ] README — design decisions, why LangGraph, why the loop is capped, why KPIs are in Python
+6. [x] `fundamentals_analyst` standalone — confirm output before wiring the graph
+7. [x] remaining four agents
+8. [x] `graph.py`
+9. [x] `charts.py`, `report_pdf.py`
+10. [x] `app.py`
+11. [x] `evals/run_eval.py` — 10 tickers, three rule checks
+12. [x] README — design decisions, why LangGraph, why the loop is capped, why KPIs are in Python
 
 ## Code style
 
@@ -119,6 +119,13 @@ Explain each file to the user in 2-4 sentences of plain English as it is created
 * **Yahoo row labels are consistent across US and Indian listings** ("Total Revenue",
   "Stockholders Equity", "Capital Expenditure"), so `FIELD_MAP` in statements.py works
   for both. TATAELXSI.NS gives 12 of 12 fields across 5 years.
+
+## Known limit
+
+Gemini free tier allows **20 requests per day per model**. One crew run uses about
+five. A ten-company eval therefore cannot finish in one day on one model: run it in
+batches, switch `GEMINI_MODEL` (each model has its own quota), or use a paid key.
+When the quota runs out the report writer gets no reply and produces a short stub.
 
 ## Logging
 

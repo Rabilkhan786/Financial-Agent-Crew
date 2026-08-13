@@ -8,8 +8,6 @@ Only GOOGLE_API_KEY is required. Every other key is optional and switches on an
 extra capability; the app runs without all of them.
 """
 
-from __future__ import annotations
-
 import logging
 import os
 import sys
@@ -20,7 +18,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-def _get(name: str, default: str = "") -> str:
+def _get(name, default=""):
     """An environment value with whitespace and stray quotes stripped off."""
     return os.getenv(name, default).strip().strip('"').strip("'")
 
@@ -79,12 +77,12 @@ SOCIAL_LIMIT = 50
 MIN_SOCIAL_POSTS = 5              # below this, the answer is "insufficient data"
 
 
-def missing_required() -> list[str]:
+def missing_required():
     """Which required settings are absent. Empty list means ready to run."""
     return [] if GOOGLE_API_KEY else ["GOOGLE_API_KEY"]
 
 
-def enabled_sources() -> dict[str, bool]:
+def enabled_sources():
     """What each optional key switches on — shown in the app so the user can
     see at a glance why a section of the report is thin."""
     return {
@@ -109,7 +107,7 @@ _LOG_FORMAT = "%(asctime)s  %(levelname)-7s %(name)-22s %(message)s"
 _logging_ready = False
 
 
-def setup_logging(level: str | None = None) -> logging.Logger:
+def setup_logging(level=None):
     """Send logs to the console and to output/run.log. Safe to call repeatedly.
 
     Streamlit re-imports modules on every interaction, so this guards against
@@ -139,7 +137,7 @@ def setup_logging(level: str | None = None) -> logging.Logger:
     return root
 
 
-def get_logger(name: str) -> logging.Logger:
+def get_logger(name):
     """The logger a module should use: `log = config.get_logger(__name__)`."""
     setup_logging()
     return logging.getLogger(f"crew.{name.replace('src.', '')}")

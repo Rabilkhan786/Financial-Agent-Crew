@@ -1,3 +1,222 @@
 # Financial Analysis Agent Crew
 
-_Written in step 12. Build in progress._
+Type a stock ticker into a Streamlit app. Five agents research the company and
+produce a fundamental analysis report, shown in the app and downloadable as a PDF.
+
+**This is informational analysis, not investment advice.** Every report carries
+that disclaimer as fixed text.
+
+---
+
+## What it does
+
+```
+START -> orchestrator -> market_researcher -> fundamentals_analyst
+      -> data_analyst -> report_writer -> orchestrator_review
+                                          |-> fundamentals_analyst (revise)
+                                          |-> market_researcher   (revise)
+                                          |-> END
+```
+
+| Agent | Job |
+|---|---|
+| `orchestrator` | Confirms the ticker is real, names the company, sets the plan |
+| `market_researcher` | News headlines and retail chatter, and what the mood is |
+| `fundamentals_analyst` | Reads the statements and explains the ratios |
+| `data_analyst` | Price performance, risk, and the five charts |
+| `report_writer` | Writes the report from what is already in the state |
+| `orchestrator_review` | Looks for contradictions and sends work back if needed |
+
+---
+
+## Running it
+
+You need Python 3.11+ and [uv](https://docs.astral.sh/uv/).
+
+```bash
+uv pip install -r requirements.txt
+cp .env.example .env        # then put your Gemini key in it
+uv run --no-project streamlit run app.py
+```
+
+With Docker:
+
+```bash
+docker build -t crew .
+docker run --env-file .env -p 8501:8501 crew
+```
+
+Tests and the eval:
+
+```bash
+uv run --no-project python -m pytest tests/ -q
+uv run --no-project python -m evals.run_eval
+```
+
+---
+
+## Keys
+
+Only one is required.
+
+| Key | Needed? | What it gives you |
+|---|---|---|
+| `GOOGLE_API_KEY` | **yes** | Gemini, which every agent uses |
+| — | — | Yahoo Finance needs no key: prices, statements, news |
+| `FINNHUB_API_KEY` | no | Better news than Yahoo headlines (US listings only on the free plan) |
+| `ALPHAVANTAGE_API_KEY` | no | A sentiment score per article |
+| `LANGSMITH_API_KEY` | no | Traces every run at smith.langchain.com |
+| `REDDIT_CLIENT_ID` / `_SECRET` | no | Reddit posts instead of StockTwits |
+
+Missing optional keys switch features off; they never stop a run. The sidebar
+shows which sources are live.
+
+---
+
+## Design decisions
+
+### The LLM never does arithmetic
+
+Every number in the report is calculated in `src/tools/ratios.py` and
+`src/tools/kpi.py` using plain pandas and numpy. Those two files import nothing
+but numpy and pandas — no model, no network — and a **test parses their own
+import statements to prove it**, so a future edit that reaches for either fails
+the test suite instead of shipping.
+
+The model receives the finished numbers and is asked what they mean. That
+matters because a wrong figure in a financial report is worse than no figure,
+and arithmetic done in code can be re-checked with a calculator. All 83 unit
+tests assert values worked out by hand first.
+
+### Red flags are rules, not opinions
+
+Nine deterministic checks in `ratios.py`, with the thresholds as named
+constants at the top of the file where they can be argued with — cash
+conversion under 70% for three years running, debt to equity over 2.0,
+interest cover under 2x, and so on. Each flag quotes the numbers that set it
+off, so the writer states a figure it never had to work out.
+
+The reviewer then checks, in Python, that every flag actually appears in the
+report. A report that quietly drops a bad finding gets sent back.
+
+### Why LangGraph and not a chain
+
+Because of one edge: `orchestrator_review` can send the work **back** to an
+earlier agent. A chain runs forwards only. The review is a conditional edge
+returning one of three strings — `fundamentals_analyst`, `market_researcher`,
+or accept — and that loop is the reason a graph is the right shape here.
+
+### Why the loop is capped
+
+Two agents can disagree forever. The review node checks
+`revision_count >= max_revisions` **at the top, before anything else**, and
+force-accepts the report when the cap is hit. Behind that, `recursion_limit=25`
+is passed to `graph.invoke` as a backstop in case the routing itself misbehaves.
+Both were tested directly: at the cap the reviewer accepts without even calling
+the model.
+
+### Missing data is reported, never inferred
+
+Common for smaller Indian listings. Anything Yahoo does not report comes back
+as `None`, is named in an `unavailable` list, and is printed in the report as
+unavailable. Ratios with a zero or negative denominator are left blank rather
+than shown — return on equity when equity is negative looks like a real number
+but means nothing.
+
+### Social sentiment is counted, not guessed
+
+StockTwits posts carry a Bullish/Bearish tag the poster set themselves, so the
+mood is *counted* in Python. Below five posts the posts are **discarded** and
+`social_sentiment` is hardcoded to `"insufficient data"` before the model sees
+anything — a handful of anonymous posts is not a signal, and the surest way to
+stop a model reading meaning into noise is to not show it the noise.
+
+### Everything external is cached
+
+`src/cache.py` stores every fetch on disk, keyed by ticker and date. Re-running
+an analysis costs nothing. If a provider fails and a stale copy exists, the
+stale copy is used rather than killing the run.
+
+---
+
+## What it computes
+
+**From the statements** — revenue growth YoY and 3-year CAGR, operating margin,
+net margin, cash conversion (OCF ÷ net profit), free cash flow, debt to equity,
+interest coverage, ROCE, ROE, and P/E and P/B against the company's *own*
+5-year median.
+
+Comparing a company with itself sidesteps the argument about which rivals count
+as comparable. A negative multiple is reported as "not meaningful", not as cheap.
+
+**From the prices** — total return, CAGR, annualised volatility, max drawdown,
+Sharpe, the 50 and 200-day averages, and return against the right index. The
+benchmark is chosen from the ticker suffix (`.NS` → NIFTY, `.BO` → SENSEX,
+otherwise S&P 500), because beating "the market" only means something if it is
+the right market. Stock and index are trimmed to shared trading days before
+comparison.
+
+---
+
+## Evaluation
+
+`evals/run_eval.py` runs ten companies — five US, five Indian, deliberately
+including struggling ones — and checks three things per report:
+
+1. **No blanks.** A NaN reaching the report means a calculation failed quietly.
+2. **No invented numbers.** Every figure in the report must trace back to a
+   calculated value. This is the check that proves the model is not doing maths.
+3. **All sections present.**
+
+### Known limit: the Gemini free tier
+
+A full run needs roughly five model calls per company. The free tier allows
+**20 requests per day per model**, so a ten-company eval cannot complete in one
+day on one model. Options: run it in batches across days, point
+`GEMINI_MODEL` at a different model (each has its own daily quota), or use a
+paid key. When the quota runs out mid-run the report writer gets no response and
+the report comes back as a short stub — visible in the eval as missing sections.
+
+---
+
+## Layout
+
+```
+app.py                     the Streamlit app
+src/config.py              the only file that reads .env, plus logging
+src/state.py               the shared TypedDict every agent reads and writes
+src/llm.py                 the only file that talks to Gemini
+src/graph.py               the LangGraph wiring
+src/cache.py               disk cache for every external call
+src/charts.py              the five matplotlib charts
+src/report_pdf.py          the PDF export
+src/formatting.py          numbers to readable text
+src/agents/                the five agents plus the reviewer
+src/tools/ratios.py        fundamental maths (pure pandas/numpy, tested)
+src/tools/kpi.py           price maths (pure pandas/numpy, tested)
+src/tools/statements.py    Yahoo line items to our column names
+src/tools/market_data.py   prices, benchmark, profile, valuation history
+src/tools/news.py          Yahoo / Finnhub / Alpha Vantage
+src/tools/social.py        StockTwits or Reddit
+tests/                     83 unit tests over the two maths modules
+evals/run_eval.py          ten companies, three checks
+output/                    reports, charts, logs (gitignored)
+```
+
+---
+
+## Notes from building it
+
+Things found by running the code, not by reading docs:
+
+- `gemini-2.5-flash` returns 404 for new API keys — it is retired for new users.
+  Working models include `gemini-3.5-flash` (the default here) and
+  `gemini-3.6-flash`. 3.6 silently ignores the temperature setting; 3.5 respects it.
+- Gemini 3 returns `message.content` as a **list of blocks, not a string**.
+  `llm.text_of()` flattens it, or every caller breaks on `.strip()`.
+- Finnhub's free plan returns **403** for Indian tickers, so `news.py` falls back
+  to Yahoo on any error, not just on an empty result.
+- Reddit blocks unauthenticated JSON entirely (403 on every endpoint), which is
+  why StockTwits is the keyless default.
+- Yahoo's statement row labels are the same for US and Indian listings, so one
+  field map covers both.

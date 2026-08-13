@@ -5,8 +5,6 @@ own part and leaves the rest alone. Keeping it in one TypedDict means there is
 a single list of everything the crew knows about a company.
 """
 
-from __future__ import annotations
-
 import operator
 from typing import Annotated, TypedDict
 
@@ -41,7 +39,7 @@ class CrewState(TypedDict, total=False):
     errors: Annotated[list, operator.add]
 
 
-def new_state(ticker: str, start_date: str, end_date: str) -> CrewState:
+def new_state(ticker, start_date, end_date):
     """A fresh state at the start of a run."""
     return CrewState(
         ticker=ticker.strip().upper(),
@@ -62,7 +60,7 @@ def new_state(ticker: str, start_date: str, end_date: str) -> CrewState:
     )
 
 
-def note(agent: str, message: str) -> dict:
+def note(agent, message):
     """One entry for the conversation log.
 
     The log is shown in the app and printed as an appendix in the PDF, so the

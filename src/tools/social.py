@@ -14,8 +14,6 @@ ever sees them. A handful of anonymous posts is not a signal, and the surest way
 to stop a model reading meaning into noise is to not show it the noise.
 """
 
-from __future__ import annotations
-
 import datetime as dt
 import json
 import urllib.error
@@ -38,7 +36,7 @@ USER_AGENT = "financial-analysis-crew/0.1"
 INSUFFICIENT = "insufficient data"
 
 
-def _reddit_credentials() -> tuple[str, str, str] | None:
+def _reddit_credentials():
     """The three Reddit values, or None if the user has not set them up."""
     if not config.HAS_REDDIT:
         return None
@@ -46,7 +44,7 @@ def _reddit_credentials() -> tuple[str, str, str] | None:
             config.REDDIT_USER_AGENT or USER_AGENT)
 
 
-def _fetch_reddit(ticker: str, company: str | None, limit: int) -> list[dict]:
+def _fetch_reddit(ticker, company, limit):
     """Recent Reddit posts mentioning the ticker, newest first."""
     import praw  # imported here so a missing praw cannot break an app that never uses it
 
@@ -71,7 +69,7 @@ def _fetch_reddit(ticker: str, company: str | None, limit: int) -> list[dict]:
     return posts
 
 
-def _fetch_stocktwits(ticker: str, limit: int) -> list[dict]:
+def _fetch_stocktwits(ticker, limit):
     """Recent StockTwits posts, including each poster's own Bullish/Bearish tag."""
     url = STOCKTWITS_URL.format(symbol=ticker.upper())
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
@@ -93,7 +91,7 @@ def _fetch_stocktwits(ticker: str, limit: int) -> list[dict]:
     return posts
 
 
-def _tally(posts: list[dict]) -> dict:
+def _tally(posts):
     """Count the self-declared sentiment tags. Plain counting, no interpretation."""
     bullish = sum(1 for post in posts if post.get("sentiment") == "Bullish")
     bearish = sum(1 for post in posts if post.get("sentiment") == "Bearish")
@@ -101,7 +99,7 @@ def _tally(posts: list[dict]) -> dict:
             "untagged": len(posts) - bullish - bearish, "total": len(posts)}
 
 
-def _describe(posts: list[dict], source: str) -> str:
+def _describe(posts, source):
     """A factual one-line summary, written in Python rather than by the model.
 
     Where posts carry sentiment tags the counts are stated outright, so the
@@ -116,9 +114,7 @@ def _describe(posts: list[dict], source: str) -> str:
             "tag, so the tone can only be read from the text.")
 
 
-def fetch_social_posts(ticker: str, company: str | None = None,
-                       limit: int = DEFAULT_LIMIT,
-                       use_cache: bool = True) -> dict:
+def fetch_social_posts(ticker, company=None, limit=DEFAULT_LIMIT, use_cache=True):
     """Retail chatter about a ticker. Never raises.
 
     Returns a dict with the source used, the posts, a sentiment tally, and

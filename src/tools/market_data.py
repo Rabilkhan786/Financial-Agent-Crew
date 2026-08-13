@@ -6,8 +6,6 @@ the historical P/E and P/B series, because building it needs prices and
 statements side by side — and it is still plain division, not an estimate.
 """
 
-from __future__ import annotations
-
 import datetime as dt
 
 import pandas as pd
@@ -22,7 +20,7 @@ CACHE_MAX_AGE_HOURS = config.CACHE_HOURS_PRICES
 VALUATION_LOOKBACK_DAYS = 40      # nearest trading day to a fiscal year end
 
 
-def _naive(prices: pd.Series) -> pd.Series:
+def _naive(prices):
     """Strip the timezone from a price index.
 
     Yahoo returns exchange-local timestamps, but fiscal period ends are plain
@@ -35,7 +33,7 @@ def _naive(prices: pd.Series) -> pd.Series:
     return prices
 
 
-def _fetch_closes(symbol: str, start: str | None, end: str | None) -> pd.Series:
+def _fetch_closes(symbol, start, end):
     """Adjusted closing prices for one symbol over a date range."""
     history = yf.Ticker(symbol).history(start=start, end=end, auto_adjust=True)
     if history is None or history.empty or "Close" not in history:
@@ -43,8 +41,7 @@ def _fetch_closes(symbol: str, start: str | None, end: str | None) -> pd.Series:
     return _naive(history["Close"].astype(float))
 
 
-def fetch_prices(symbol: str, start: str | None = None, end: str | None = None,
-                 use_cache: bool = True) -> pd.Series:
+def fetch_prices(symbol, start=None, end=None, use_cache=True):
     """Closing prices, cached by symbol and date range. Empty Series on failure."""
     key = f"{symbol}:{start}:{end}"
     try:
@@ -57,14 +54,14 @@ def fetch_prices(symbol: str, start: str | None = None, end: str | None = None,
         return pd.Series(dtype=float)
 
 
-def _fetch_info(symbol: str) -> dict:
+def _fetch_info(symbol):
     try:
         return yf.Ticker(symbol).info or {}
     except Exception:
         return {}
 
 
-def fetch_profile(symbol: str, use_cache: bool = True) -> dict:
+def fetch_profile(symbol, use_cache=True):
     """Company name, sector, currency, and today's headline multiples."""
     try:
         if use_cache:
@@ -88,7 +85,7 @@ def fetch_profile(symbol: str, use_cache: bool = True) -> dict:
     }
 
 
-def valuation_history(prices: pd.Series, statements: pd.DataFrame) -> dict:
+def valuation_history(prices, statements):
     """P/E and P/B as they stood at each past fiscal year end.
 
     Market value at a year end is that year's share count times the closing
@@ -136,9 +133,7 @@ def valuation_history(prices: pd.Series, statements: pd.DataFrame) -> dict:
     }
 
 
-def fetch_market_data(ticker: str, start: str | None = None, end: str | None = None,
-                      statements: pd.DataFrame | None = None,
-                      use_cache: bool = True) -> dict:
+def fetch_market_data(ticker, start=None, end=None, statements=None, use_cache=True):
     """Everything price-related for one company, in one call.
 
     Fetches the stock over the requested window, the right index to judge it

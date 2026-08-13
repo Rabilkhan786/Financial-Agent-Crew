@@ -10,8 +10,6 @@ the same code path — one way in, one way out, nothing to special-case. The
 folder is local, disposable and gitignored: deleting it only costs a re-fetch.
 """
 
-from __future__ import annotations
-
 import hashlib
 import pickle
 import time
@@ -26,7 +24,7 @@ CACHE_DIR = config.CACHE_DIR
 DEFAULT_MAX_AGE_HOURS = 24.0
 
 
-def _path_for(namespace: str, key: str) -> Path:
+def _path_for(namespace, key):
     """Where one cached value lives.
 
     The key is hashed because it contains characters (colons, slashes, dots)
@@ -37,7 +35,7 @@ def _path_for(namespace: str, key: str) -> Path:
     return CACHE_DIR / namespace / f"{digest}.pkl"
 
 
-def age_hours(namespace: str, key: str) -> float | None:
+def age_hours(namespace, key):
     """How old the cached value is, or None if it was never stored."""
     path = _path_for(namespace, key)
     if not path.exists():
@@ -45,8 +43,7 @@ def age_hours(namespace: str, key: str) -> float | None:
     return (time.time() - path.stat().st_mtime) / 3600
 
 
-def load(namespace: str, key: str,
-         max_age_hours: float = DEFAULT_MAX_AGE_HOURS) -> tuple[bool, Any]:
+def load(namespace, key, max_age_hours=DEFAULT_MAX_AGE_HOURS):
     """Read a cached value. Returns (hit, value); (False, None) when there is no
     fresh copy. A corrupt file is treated as a miss rather than an error."""
     path = _path_for(namespace, key)
@@ -61,7 +58,7 @@ def load(namespace: str, key: str,
         return False, None
 
 
-def save(namespace: str, key: str, value: Any) -> None:
+def save(namespace, key, value):
     """Write a value to the cache. Never raises — a cache failure must not take
     down a run that already has its data."""
     path = _path_for(namespace, key)
@@ -73,9 +70,7 @@ def save(namespace: str, key: str, value: Any) -> None:
         pass
 
 
-def cached(namespace: str, key: str, producer: Callable[[], Any],
-           max_age_hours: float = DEFAULT_MAX_AGE_HOURS,
-           use_stale_on_failure: bool = True) -> Any:
+def cached(namespace, key, producer, max_age_hours=DEFAULT_MAX_AGE_HOURS, use_stale_on_failure=True):
     """Return a cached value, or produce and store it.
 
     If the producer fails (a provider is down or throttling) and a stale copy
@@ -105,7 +100,7 @@ def cached(namespace: str, key: str, producer: Callable[[], Any],
     return fresh
 
 
-def clear(namespace: str | None = None) -> int:
+def clear(namespace=None):
     """Delete cached files. Returns how many were removed."""
     target = CACHE_DIR / namespace if namespace else CACHE_DIR
     if not target.exists():

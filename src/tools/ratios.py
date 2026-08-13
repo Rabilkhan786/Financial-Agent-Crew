@@ -1,85 +1,73 @@
-"""Fundamental ratios — pure pandas/numpy, no LLM and no network.
+"""Fundamental ratios. Plain pandas and numpy, no LLM and no internet.
 
-Every fundamental number the agent crew talks about is computed here. That is
-deliberate: arithmetic done in code can be unit tested and re-derived by hand,
-while arithmetic done by a language model cannot. The LLM only ever *interprets*
-what this module returns.
+Every fundamental number in the report is worked out here so it can be tested
+and checked by hand. The LLM only reads these numbers, it never calculates them.
 
-The input is one tidy DataFrame of annual statement data: one row per fiscal
-year (oldest first), one column per canonical field below. `statements.py` is
-responsible for mapping a data provider's line-item names onto these, so this
-module never has to know that yfinance exists.
+Input: one table with a row per financial year (oldest first) and the columns
+named below. statements.py builds that table from Yahoo data.
 """
-
-from __future__ import annotations
 
 import numpy as np
 import pandas as pd
 
-# --- Canonical statement fields ---------------------------------------------
+# Column names we use everywhere.
 REVENUE = "revenue"
 OPERATING_INCOME = "operating_income"
 NET_INCOME = "net_income"
 EBIT = "ebit"
-INTEREST_EXPENSE = "interest_expense"          # positive magnitude of the cost
+INTEREST_EXPENSE = "interest_expense"
 OPERATING_CASH_FLOW = "operating_cash_flow"
-CAPEX = "capex"                                # positive magnitude of the spend
+CAPEX = "capex"
 TOTAL_DEBT = "total_debt"
 TOTAL_EQUITY = "total_equity"
 TOTAL_ASSETS = "total_assets"
 CURRENT_LIABILITIES = "current_liabilities"
 
-# --- Thresholds -------------------------------------------------------------
-# Red flags are rules, not opinions, so every threshold lives here in the open
-# where it can be argued with. Nothing below is decided by the LLM.
-CASH_CONVERSION_FLOOR = 0.70      # OCF below 70% of profit for 3 years running
+# Red flag limits. They live here in the open so anyone can argue with them.
+CASH_CONVERSION_FLOOR = 0.70     # cash below 70% of profit, 3 years running
 DEBT_TO_EQUITY_CEILING = 2.0
-INTEREST_COVERAGE_FLOOR = 2.0     # EBIT less than 2x the interest bill
-MARGIN_EROSION_PP = 0.03          # 3 percentage points of operating margin lost
-PROFIT_VS_REVENUE_GAP = 0.20      # profit growing 20pp faster than revenue
+INTEREST_COVERAGE_FLOOR = 2.0
+MARGIN_EROSION_PP = 0.03         # 3 percentage points of margin lost
+PROFIT_VS_REVENUE_GAP = 0.20     # profit growing 20 points faster than sales
 CAGR_YEARS = 3
 VALUATION_MEDIAN_YEARS = 5
-VALUATION_IN_LINE_BAND = 0.05     # within +/-5% of its own median = "in line"
+VALUATION_IN_LINE_BAND = 0.05    # within 5% of its own median = "in line"
 
 
-# --- Small helpers ----------------------------------------------------------
+def get_column(table, name):
+    """One column as numbers, or None if it is missing or empty.
 
-def _column(fin: pd.DataFrame, name: str) -> pd.Series | None:
-    """Return one statement column as numbers, or None if it is missing/empty.
-
-    Missing data is returned as None rather than guessed at. Rule 5 of the
-    project: absent statement data is reported as unavailable, never inferred.
+    We return None instead of guessing. If the data provider does not report
+    something, the report says so.
     """
-    if name not in fin.columns:
+    if name not in table.columns:
         return None
-    values = pd.to_numeric(fin[name], errors="coerce")
-    if values.dropna().empty:
+    numbers = pd.to_numeric(table[name], errors="coerce")
+    if numbers.dropna().empty:
         return None
-    return values
+    return numbers
 
 
-def _divide(numerator: pd.Series | None, denominator: pd.Series | None,
-            positive_denominator_only: bool = False) -> pd.Series | None:
-    """Divide two columns, giving NaN instead of an error or an infinity.
+def divide(top, bottom, positive_only=False):
+    """Divide two columns. Gives a blank instead of an error or infinity.
 
-    `positive_denominator_only` masks zero *and* negative denominators. A ratio
-    like return-on-equity is meaningless when equity is negative, and printing a
-    tidy-looking negative number there would mislead a reader.
+    positive_only also blanks negative bottoms. Return on equity when equity is
+    negative looks like a real number but means nothing.
     """
-    if numerator is None or denominator is None:
+    if top is None or bottom is None:
         return None
-    safe = denominator.astype(float).copy()
+    safe = bottom.astype(float).copy()
     safe[safe == 0] = np.nan
-    if positive_denominator_only:
+    if positive_only:
         safe[safe < 0] = np.nan
-    return numerator.astype(float) / safe
+    return top.astype(float) / safe
 
 
-def latest(series: pd.Series | None) -> float | None:
-    """The most recent usable value, or None. Never returns NaN."""
-    if series is None:
+def latest(column):
+    """The most recent usable value, or None. Never returns a blank (NaN)."""
+    if column is None:
         return None
-    usable = series.dropna()
+    usable = column.dropna()
     if usable.empty:
         return None
     return float(usable.iloc[-1])
@@ -87,18 +75,18 @@ def latest(series: pd.Series | None) -> float | None:
 
 # --- Growth -----------------------------------------------------------------
 
-def revenue_growth_yoy(fin: pd.DataFrame) -> pd.Series | None:
-    """Year-on-year revenue growth for every year except the first."""
-    revenue = _column(fin, REVENUE)
+def revenue_growth_yoy(table):
+    """Revenue growth against the year before."""
+    revenue = get_column(table, REVENUE)
     if revenue is None:
         return None
-    previous = revenue.shift(1)
-    return _divide(revenue - previous, previous, positive_denominator_only=True)
+    last_year = revenue.shift(1)
+    return divide(revenue - last_year, last_year, positive_only=True)
 
 
-def revenue_cagr(fin: pd.DataFrame, years: int = CAGR_YEARS) -> float | None:
-    """Compound annual growth rate of revenue over the last `years` years."""
-    revenue = _column(fin, REVENUE)
+def revenue_cagr(table, years=CAGR_YEARS):
+    """Average yearly revenue growth over the last few years."""
+    revenue = get_column(table, REVENUE)
     if revenue is None:
         return None
     usable = revenue.dropna()
@@ -113,196 +101,201 @@ def revenue_cagr(fin: pd.DataFrame, years: int = CAGR_YEARS) -> float | None:
 
 # --- Profitability ----------------------------------------------------------
 
-def operating_margin(fin: pd.DataFrame) -> pd.Series | None:
-    return _divide(_column(fin, OPERATING_INCOME), _column(fin, REVENUE),
-                   positive_denominator_only=True)
+def operating_margin(table):
+    """Operating profit as a share of revenue."""
+    return divide(get_column(table, OPERATING_INCOME), get_column(table, REVENUE),
+                  positive_only=True)
 
 
-def net_margin(fin: pd.DataFrame) -> pd.Series | None:
-    return _divide(_column(fin, NET_INCOME), _column(fin, REVENUE),
-                   positive_denominator_only=True)
+def net_margin(table):
+    """Net profit as a share of revenue."""
+    return divide(get_column(table, NET_INCOME), get_column(table, REVENUE),
+                  positive_only=True)
 
 
-def return_on_equity(fin: pd.DataFrame) -> pd.Series | None:
-    return _divide(_column(fin, NET_INCOME), _column(fin, TOTAL_EQUITY),
-                   positive_denominator_only=True)
+def return_on_equity(table):
+    """Profit earned on the shareholders' money."""
+    return divide(get_column(table, NET_INCOME), get_column(table, TOTAL_EQUITY),
+                  positive_only=True)
 
 
-def return_on_capital_employed(fin: pd.DataFrame) -> pd.Series | None:
-    """EBIT over capital employed (total assets minus current liabilities)."""
-    ebit = _column(fin, EBIT)
-    if ebit is None:
-        ebit = _column(fin, OPERATING_INCOME)
-    assets = _column(fin, TOTAL_ASSETS)
-    current = _column(fin, CURRENT_LIABILITIES)
-    if assets is None or current is None:
+def return_on_capital_employed(table):
+    """Operating profit against the money tied up in the business."""
+    profit = get_column(table, EBIT)
+    if profit is None:
+        profit = get_column(table, OPERATING_INCOME)
+    assets = get_column(table, TOTAL_ASSETS)
+    short_term = get_column(table, CURRENT_LIABILITIES)
+    if assets is None or short_term is None:
         return None
-    return _divide(ebit, assets - current, positive_denominator_only=True)
+    return divide(profit, assets - short_term, positive_only=True)
 
 
 # --- Cash -------------------------------------------------------------------
 
-def cash_conversion(fin: pd.DataFrame) -> pd.Series | None:
-    """Operating cash flow divided by net profit.
+def cash_conversion(table):
+    """Cash from operations divided by net profit.
 
-    Loss-making years are left blank: dividing cash flow by a negative profit
-    produces a number that looks like a ratio but means nothing.
+    Loss years are left blank because dividing cash by a loss means nothing.
     """
-    return _divide(_column(fin, OPERATING_CASH_FLOW), _column(fin, NET_INCOME),
-                   positive_denominator_only=True)
+    return divide(get_column(table, OPERATING_CASH_FLOW), get_column(table, NET_INCOME),
+                  positive_only=True)
 
 
-def free_cash_flow(fin: pd.DataFrame) -> pd.Series | None:
-    """Operating cash flow minus capital expenditure, in currency units."""
-    ocf = _column(fin, OPERATING_CASH_FLOW)
-    capex = _column(fin, CAPEX)
-    if ocf is None or capex is None:
+def free_cash_flow(table):
+    """Cash left after paying for equipment and buildings."""
+    cash = get_column(table, OPERATING_CASH_FLOW)
+    spending = get_column(table, CAPEX)
+    if cash is None or spending is None:
         return None
-    return ocf - capex.abs()
+    return cash - spending.abs()
 
 
 # --- Balance sheet ----------------------------------------------------------
 
-def debt_to_equity(fin: pd.DataFrame) -> pd.Series | None:
-    return _divide(_column(fin, TOTAL_DEBT), _column(fin, TOTAL_EQUITY),
-                   positive_denominator_only=True)
+def debt_to_equity(table):
+    """How much the company borrowed against what the owners put in."""
+    return divide(get_column(table, TOTAL_DEBT), get_column(table, TOTAL_EQUITY),
+                  positive_only=True)
 
 
-def interest_coverage(fin: pd.DataFrame) -> pd.Series | None:
-    """EBIT divided by the interest bill — how many times over it is covered."""
-    ebit = _column(fin, EBIT)
-    if ebit is None:
-        ebit = _column(fin, OPERATING_INCOME)
-    interest = _column(fin, INTEREST_EXPENSE)
+def interest_coverage(table):
+    """How many times over the profit covers the interest bill."""
+    profit = get_column(table, EBIT)
+    if profit is None:
+        profit = get_column(table, OPERATING_INCOME)
+    interest = get_column(table, INTEREST_EXPENSE)
     if interest is None:
         return None
-    return _divide(ebit, interest.abs(), positive_denominator_only=True)
+    return divide(profit, interest.abs(), positive_only=True)
 
 
-# --- Valuation against the company's own history ----------------------------
+# --- Valuation --------------------------------------------------------------
 
-def valuation_vs_median(current: float | None, history: pd.Series | None,
-                        years: int = VALUATION_MEDIAN_YEARS) -> dict | None:
-    """Compare a multiple with the same company's own median over `years`.
+def valuation_vs_median(current, history, years=VALUATION_MEDIAN_YEARS):
+    """Compare a multiple with the same company's own past.
 
-    Comparing a company against itself sidesteps the argument about which peers
-    are truly comparable. A negative multiple (a loss-making company) is reported
-    as not meaningful rather than dressed up as "cheap".
+    Comparing a company with itself avoids the argument about which rivals
+    count as comparable. A negative multiple is called out, not called cheap.
     """
     if current is None or history is None:
         return None
-    window = pd.to_numeric(history, errors="coerce").dropna()
-    window = window[window > 0].tail(years)
-    if window.empty:
+    past = pd.to_numeric(history, errors="coerce").dropna()
+    past = past[past > 0].tail(years)
+    if past.empty:
         return None
-    median = float(window.median())
+
+    middle = float(past.median())
     if current <= 0:
-        return {"current": float(current), "median": median, "years": len(window),
+        return {"current": float(current), "median": middle, "years": len(past),
                 "premium_pct": None,
                 "verdict": "not meaningful (the multiple is negative)"}
-    premium = current / median - 1
-    if abs(premium) <= VALUATION_IN_LINE_BAND:
-        verdict = f"in line with its own {len(window)}-year median"
-    elif premium > 0:
-        verdict = f"{premium:.0%} above its own {len(window)}-year median"
+
+    gap = current / middle - 1
+    if abs(gap) <= VALUATION_IN_LINE_BAND:
+        verdict = f"in line with its own {len(past)}-year median"
+    elif gap > 0:
+        verdict = f"{gap:.0%} above its own {len(past)}-year median"
     else:
-        verdict = f"{abs(premium):.0%} below its own {len(window)}-year median"
-    return {"current": float(current), "median": median, "years": len(window),
-            "premium_pct": float(premium), "verdict": verdict}
+        verdict = f"{abs(gap):.0%} below its own {len(past)}-year median"
+
+    return {"current": float(current), "median": middle, "years": len(past),
+            "premium_pct": float(gap), "verdict": verdict}
 
 
 # --- Red flags --------------------------------------------------------------
 
-def red_flags(fin: pd.DataFrame) -> list[dict]:
-    """Deterministic warning rules. No LLM opinion involved.
+def red_flags(table):
+    """Warning rules. Fixed limits, no opinion from the model.
 
-    Each flag quotes the numbers that triggered it, so the report writer can
-    state a figure it never had to calculate.
+    Each flag quotes the numbers that set it off, so the report can state a
+    figure it never had to work out.
     """
-    found: list[dict] = []
+    found = []
 
-    def flag(code: str, severity: str, message: str) -> None:
+    def add(code, severity, message):
         found.append({"code": code, "severity": severity, "message": message})
 
-    conversion = cash_conversion(fin)
+    conversion = cash_conversion(table)
     if conversion is not None:
         recent = conversion.dropna().tail(3)
         if len(recent) == 3 and (recent < CASH_CONVERSION_FLOOR).all():
-            flag("weak_cash_conversion", "high",
-                 f"Operating cash flow has stayed below {CASH_CONVERSION_FLOOR:.0%} of net "
-                 f"profit for three straight years (latest {recent.iloc[-1]:.2f}x). "
-                 "Reported profit is not turning into cash.")
+            add("weak_cash_conversion", "high",
+                f"Operating cash flow has stayed below {CASH_CONVERSION_FLOOR:.0%} of net "
+                f"profit for three straight years (latest {recent.iloc[-1]:.2f}x). "
+                "Reported profit is not turning into cash.")
 
-    ocf = _column(fin, OPERATING_CASH_FLOW)
-    ocf_latest = latest(ocf)
-    if ocf_latest is not None and ocf_latest < 0:
-        flag("negative_operating_cash_flow", "high",
-             f"Operating cash flow is negative in the latest year ({ocf_latest:,.0f}). "
-             "The business consumed cash from its own operations.")
+    cash = get_column(table, OPERATING_CASH_FLOW)
+    cash_now = latest(cash)
+    if cash_now is not None and cash_now < 0:
+        add("negative_operating_cash_flow", "high",
+            f"Operating cash flow is negative in the latest year ({cash_now:,.0f}). "
+            "The business used up cash rather than making it.")
 
-    fcf = free_cash_flow(fin)
-    if fcf is not None:
-        recent_fcf = fcf.dropna().tail(3)
-        negative_years = int((recent_fcf < 0).sum())
-        if len(recent_fcf) == 3 and negative_years >= 2:
-            flag("persistent_negative_fcf", "medium",
-                 f"Free cash flow was negative in {negative_years} of the last 3 years. "
-                 "Capital spending is running ahead of the cash generated.")
+    spare_cash = free_cash_flow(table)
+    if spare_cash is not None:
+        recent = spare_cash.dropna().tail(3)
+        bad_years = int((recent < 0).sum())
+        if len(recent) == 3 and bad_years >= 2:
+            add("persistent_negative_fcf", "medium",
+                f"Free cash flow was negative in {bad_years} of the last 3 years. "
+                "Spending is running ahead of the cash coming in.")
 
-    equity_latest = latest(_column(fin, TOTAL_EQUITY))
-    if equity_latest is not None and equity_latest < 0:
-        flag("negative_equity", "high",
-             f"Shareholder equity is negative ({equity_latest:,.0f}). "
-             "Liabilities exceed assets on the balance sheet.")
+    equity_now = latest(get_column(table, TOTAL_EQUITY))
+    if equity_now is not None and equity_now < 0:
+        add("negative_equity", "high",
+            f"Shareholder equity is negative ({equity_now:,.0f}). "
+            "The company owes more than it owns.")
 
-    leverage = latest(debt_to_equity(fin))
-    if leverage is not None and leverage > DEBT_TO_EQUITY_CEILING:
-        flag("high_leverage", "high",
-             f"Debt-to-equity is {leverage:.2f}, above the {DEBT_TO_EQUITY_CEILING:.1f} "
-             "threshold used here for a heavily borrowed balance sheet.")
+    borrowing = latest(debt_to_equity(table))
+    if borrowing is not None and borrowing > DEBT_TO_EQUITY_CEILING:
+        add("high_leverage", "high",
+            f"Debt to equity is {borrowing:.2f}, above the {DEBT_TO_EQUITY_CEILING:.1f} "
+            "level we treat as heavily borrowed.")
 
-    coverage = latest(interest_coverage(fin))
-    if coverage is not None and coverage < INTEREST_COVERAGE_FLOOR:
-        flag("thin_interest_cover", "high",
-             f"Operating profit covers the interest bill only {coverage:.2f} times, below the "
-             f"{INTEREST_COVERAGE_FLOOR:.1f}x threshold. There is little room if profit falls.")
+    cover = latest(interest_coverage(table))
+    if cover is not None and cover < INTEREST_COVERAGE_FLOOR:
+        add("thin_interest_cover", "high",
+            f"Operating profit covers the interest bill only {cover:.2f} times, under the "
+            f"{INTEREST_COVERAGE_FLOOR:.1f}x level. There is little room if profit falls.")
 
-    margins = operating_margin(fin)
-    latest_growth = latest(revenue_growth_yoy(fin))
-    if margins is not None and latest_growth is not None and latest_growth > 0:
-        recent_margins = margins.dropna().tail(CAGR_YEARS + 1)
-        if len(recent_margins) >= 2:
-            erosion = float(recent_margins.iloc[0] - recent_margins.iloc[-1])
-            if erosion >= MARGIN_EROSION_PP:
-                flag("margin_erosion", "medium",
-                     f"Revenue is still growing ({latest_growth:.1%} in the latest year) but the "
-                     f"operating margin fell from {recent_margins.iloc[0]:.1%} to "
-                     f"{recent_margins.iloc[-1]:.1%}. Growth is costing profitability.")
+    margins = operating_margin(table)
+    growth_now = latest(revenue_growth_yoy(table))
+    if margins is not None and growth_now is not None and growth_now > 0:
+        recent = margins.dropna().tail(CAGR_YEARS + 1)
+        if len(recent) >= 2:
+            drop = float(recent.iloc[0] - recent.iloc[-1])
+            if drop >= MARGIN_EROSION_PP:
+                add("margin_erosion", "medium",
+                    f"Revenue is still growing ({growth_now:.1%} in the latest year) but the "
+                    f"operating margin fell from {recent.iloc[0]:.1%} to {recent.iloc[-1]:.1%}. "
+                    "Growth is costing profitability.")
 
-    net_income = _column(fin, NET_INCOME)
-    if net_income is not None and ocf is not None and latest_growth is not None:
-        profits = net_income.dropna()
-        cash = ocf.dropna()
-        if len(profits) >= 2 and len(cash) >= 2 and profits.iloc[-2] > 0 and latest_growth > 0:
-            profit_change = float(profits.iloc[-1] / profits.iloc[-2] - 1)
-            if (profit_change > latest_growth + PROFIT_VS_REVENUE_GAP
-                    and cash.iloc[-1] < cash.iloc[-2]):
-                flag("earnings_quality", "medium",
-                     f"Net profit grew {profit_change:.1%} against revenue growth of "
-                     f"{latest_growth:.1%}, while operating cash flow fell. The extra profit is "
-                     "not showing up in cash.")
+    profits = get_column(table, NET_INCOME)
+    if profits is not None and cash is not None and growth_now is not None:
+        profit_years = profits.dropna()
+        cash_years = cash.dropna()
+        if (len(profit_years) >= 2 and len(cash_years) >= 2
+                and profit_years.iloc[-2] > 0 and growth_now > 0):
+            profit_growth = float(profit_years.iloc[-1] / profit_years.iloc[-2] - 1)
+            if (profit_growth > growth_now + PROFIT_VS_REVENUE_GAP
+                    and cash_years.iloc[-1] < cash_years.iloc[-2]):
+                add("earnings_quality", "medium",
+                    f"Net profit grew {profit_growth:.1%} against revenue growth of "
+                    f"{growth_now:.1%}, while cash from operations fell. The extra profit is "
+                    "not showing up as cash.")
 
-    if latest_growth is not None and latest_growth < 0:
-        flag("revenue_decline", "medium",
-             f"Revenue fell {abs(latest_growth):.1%} in the latest year.")
+    if growth_now is not None and growth_now < 0:
+        add("revenue_decline", "medium",
+            f"Revenue fell {abs(growth_now):.1%} in the latest year.")
 
     return found
 
 
-# --- One entry point --------------------------------------------------------
+# --- Everything in one call -------------------------------------------------
 
-# Every ratio the crew reports on, paired with the function producing its history.
-_SERIES_METRICS = {
+# Each ratio and the function that builds its history.
+ALL_RATIOS = {
     "revenue_growth_yoy": revenue_growth_yoy,
     "operating_margin": operating_margin,
     "net_margin": net_margin,
@@ -314,67 +307,53 @@ _SERIES_METRICS = {
     "return_on_equity": return_on_equity,
 }
 
-# Raw statement lines carried through for the charts and for anyone who wants to
-# check a ratio by hand.
-_PASSTHROUGH_FIELDS = (REVENUE, OPERATING_INCOME, NET_INCOME, OPERATING_CASH_FLOW,
-                       TOTAL_DEBT, TOTAL_EQUITY)
+# Raw lines kept for the charts and for checking a ratio by hand.
+RAW_LINES = [REVENUE, OPERATING_INCOME, NET_INCOME, OPERATING_CASH_FLOW,
+             TOTAL_DEBT, TOTAL_EQUITY]
 
 
-def compute_all(fin: pd.DataFrame,
-                pe_current: float | None = None,
-                pe_history: pd.Series | None = None,
-                pb_current: float | None = None,
-                pb_history: pd.Series | None = None) -> dict:
-    """Compute every fundamental ratio the crew uses.
+def compute_all(table, pe_current=None, pe_history=None,
+                pb_current=None, pb_history=None):
+    """Work out every ratio at once.
 
-    Returns the latest scalars (never NaN — a metric that cannot be computed is
-    None and is named in `unavailable`), the full history of each metric for
-    charting, valuation against the company's own median, and the red flags.
+    Latest values are never blank: anything we could not work out is None and
+    is named in "unavailable", so the report can say so honestly.
     """
-    empty = fin is None or fin.empty
-    if empty:
+    if table is None or table.empty:
         return {"latest": {}, "series": {}, "valuation": {"pe": None, "pb": None},
                 "red_flags": [],
-                "unavailable": sorted(list(_SERIES_METRICS)
+                "unavailable": sorted(list(ALL_RATIOS)
                                       + ["revenue_cagr", "pe_vs_median", "pb_vs_median"])}
 
-    fin = fin.sort_index()
+    table = table.sort_index()
+    series = {}
+    values = {}
+    unavailable = []
 
-    series: dict[str, pd.Series] = {}
-    latest_values: dict[str, float | None] = {}
-    unavailable: list[str] = []
-
-    for name, function in _SERIES_METRICS.items():
-        computed = function(fin)
-        if computed is not None:
-            series[name] = computed
-        value = latest(computed)
-        latest_values[name] = value
+    for name, work_out in ALL_RATIOS.items():
+        history = work_out(table)
+        if history is not None:
+            series[name] = history
+        value = latest(history)
+        values[name] = value
         if value is None:
             unavailable.append(name)
 
-    cagr = revenue_cagr(fin)
-    latest_values["revenue_cagr"] = cagr
-    if cagr is None:
+    growth = revenue_cagr(table)
+    values["revenue_cagr"] = growth
+    if growth is None:
         unavailable.append("revenue_cagr")
 
-    for field in _PASSTHROUGH_FIELDS:
-        column = _column(fin, field)
+    for name in RAW_LINES:
+        column = get_column(table, name)
         if column is not None:
-            series[field] = column
+            series[name] = column
 
-    valuation = {
-        "pe": valuation_vs_median(pe_current, pe_history),
-        "pb": valuation_vs_median(pb_current, pb_history),
-    }
+    valuation = {"pe": valuation_vs_median(pe_current, pe_history),
+                 "pb": valuation_vs_median(pb_current, pb_history)}
     for name, result in valuation.items():
         if result is None:
             unavailable.append(f"{name}_vs_median")
 
-    return {
-        "latest": latest_values,
-        "series": series,
-        "valuation": valuation,
-        "red_flags": red_flags(fin),
-        "unavailable": sorted(unavailable),
-    }
+    return {"latest": values, "series": series, "valuation": valuation,
+            "red_flags": red_flags(table), "unavailable": sorted(unavailable)}

@@ -5,8 +5,6 @@ file means the model name, the temperature and the JSON parsing are set once
 instead of being copied into five agents.
 """
 
-from __future__ import annotations
-
 import json
 
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -18,7 +16,7 @@ log = config.get_logger(__name__)
 _model = None
 
 
-def get_llm() -> ChatGoogleGenerativeAI:
+def get_llm():
     """The Gemini model, made once and reused."""
     global _model
     if _model is None:
@@ -33,7 +31,7 @@ def get_llm() -> ChatGoogleGenerativeAI:
     return _model
 
 
-def text_of(reply) -> str:
+def text_of(reply):
     """Get plain text out of a model reply.
 
     Gemini 3 returns `content` as a list of blocks rather than a string, so
@@ -52,7 +50,7 @@ def text_of(reply) -> str:
     return "".join(parts).strip()
 
 
-def ask(prompt: str) -> str:
+def ask(prompt):
     """Send a prompt, get text back. Returns "" if the call fails."""
     try:
         return text_of(get_llm().invoke(prompt))
@@ -61,7 +59,7 @@ def ask(prompt: str) -> str:
         return ""
 
 
-def _strip_code_fence(text: str) -> str:
+def _strip_code_fence(text):
     """Remove the ```json ... ``` wrapper models often add."""
     text = text.strip()
     if text.startswith("```"):
@@ -70,7 +68,7 @@ def _strip_code_fence(text: str) -> str:
     return text.strip()
 
 
-def ask_json(prompt: str, retries: int = 1) -> dict:
+def ask_json(prompt, retries=1):
     """Send a prompt that should return JSON, and parse it.
 
     Models sometimes wrap JSON in a code fence or add a sentence before it, so
