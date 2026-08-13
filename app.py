@@ -11,7 +11,8 @@ import streamlit as st
 
 from src import config, formatting, graph, report_pdf
 
-st.set_page_config(page_title="Financial Analysis Agent Crew", layout="wide")
+st.set_page_config(page_title="Financial Analysis Agent Crew", layout="wide",
+                   initial_sidebar_state="expanded")
 
 st.title("Financial Analysis Agent Crew")
 st.caption("Five agents research a company and write a fundamental analysis report. "
