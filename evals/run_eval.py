@@ -81,14 +81,32 @@ def numbers_we_calculated(result):
         for value in column.dropna().tolist():
             remember(value)
 
+    # The social post counts are worked out in Python too, so "16 out of 30
+    # posts" is a calculated figure like any other.
+    research = result.get("research", {})
+    for value in (research.get("social", {}).get("tally", {}) or {}).values():
+        remember(value)
+    remember(research.get("social", {}).get("post_count"))
+
+    # A number quoted from a headline we actually fetched is sourced, not
+    # invented. "$20 billion capital raise" is fine if a real article said it.
+    for article in research.get("articles", []):
+        text = f"{article.get('title', '')} {article.get('summary', '')}"
+        for written in re.findall(r"\d+(?:\.\d+)?", text):
+            allowed.add(written)
+
     # Years are always fine to mention.
     for year in range(2015, 2036):
         allowed.add(str(year))
     return allowed
 
 
-# Dates are not figures. "2023-01-01" must not be read as the numbers 01 and 01.
-DATE_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}")
+# Dates are not figures. Both "2023-01-01" and "August 13, 2026" must not be
+# read as the numbers 01, 13 and so on.
+DATE_PATTERN = re.compile(
+    r"\d{4}-\d{2}-\d{2}"
+    r"|(?:January|February|March|April|May|June|July|August|September|October"
+    r"|November|December)\s+\d{1,2},?\s+\d{4}")
 
 
 def numbers_in(report):
@@ -138,6 +156,8 @@ def evaluate(ticker, start_date, end_date):
         "ticker": ticker,
         "company": result.get("company"),
         "report": result.get("report", ""),
+        "research": {"articles": result.get("research", {}).get("articles", []),
+                     "social": result.get("research", {}).get("social", {})},
         "report_length": len(result.get("report", "")),
         "revisions": result.get("revision_count", 0),
         "errors": result.get("errors", []),
