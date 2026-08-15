@@ -210,15 +210,19 @@ flagged proves nothing:
 
 | Check | Result |
 |---|---|
-| No blanks | **10 / 10** |
+| No blanks (NaN) | **10 / 10** |
 | All sections present | **10 / 10** |
-| No unsourced numbers | **8 / 10** |
+| No unsourced numbers | **10 / 10** |
 
-The two failures are real and worth reading. Infosys quoted an analyst target
-of `1,199` and YesBank turned a sourced "34% jump in profit" into an invented
-"34-45%" range. Neither figure appears in any article the crew fetched, so the
-model supplied them from its own knowledge despite being told not to. The check
-exists to catch exactly that.
+That 10/10 is the result of the guard doing its job, not of the model behaving.
+On the same run the reviewer rejected 4 reports for unsourced numbers and the
+researcher caught itself 7 times, each one going back for a rewrite. Before the
+guard existed the failures reached the reader: a `1,199` price target, a
+`$20 billion` capital raise, and a sourced "34% jump in profit" widened into an
+invented "34-45%" range. None of those figures appeared in any fetched article.
+
+Prompting alone did not stop it. The prompts now name the failure explicitly and
+still the guard fires - which is the argument for having both.
 
 Getting there meant fixing five false positives in the checker first: dates in
 both ISO and prose form, thousands separators splitting `3,807.45` into two
@@ -230,12 +234,20 @@ real findings.
 
 ### Known limit: free-tier rate limits
 
-A full run needs roughly five model calls per company. The free tier allows
-**20 requests per day per model**, so a ten-company eval cannot complete in one
-day on one model. Options: run it in batches across days, point
-`GEMINI_MODEL` at a different model (each has its own daily quota), or use a
-paid key. When the quota runs out mid-run the report writer gets no response and
-the report comes back as a short stub — visible in the eval as missing sections.
+A full run needs five to seven model calls per company.
+
+**Gemini** allows 20 requests per day per model, so a ten-company eval cannot
+finish in a day. That is why the default provider is Groq.
+
+**Groq** limits tokens per minute, and the limit differs by model: 8,000 for
+`openai/gpt-oss-120b` but **12,000 for `llama-3.3-70b-versatile`**, which is why
+the smaller model is the default. Checked by reading the rate-limit headers
+rather than assuming the biggest model is the best one to run a batch on.
+
+`llm.ask()` retries, and waits for as long as the provider asks. The 429 body
+says "try again in 8.7s"; a fixed five-second guess wasted the attempt and left
+four of ten reports as stubs. Reading the stated delay and moving to the
+higher-limit model, all four passed on the retry.
 
 ---
 
