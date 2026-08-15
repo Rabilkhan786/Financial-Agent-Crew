@@ -82,7 +82,7 @@ Docker uses the same `requirements.txt` via uv, so container and laptop match.
 2. [x] `tools/ratios.py` + `tests/test_ratios.py` — tests passing
 3. [x] `tools/kpi.py` + `tests/test_kpi.py` — tests passing
 4. [x] `tools/statements.py`, `tools/market_data.py`, `cache.py`, `news.py`, `social.py`,
-       plus `config.py` and logging (verified live on AAPL and TATAELXSI.NS)
+       plus `config.py` and logging (verified live on AAPL and BA)
 5. [x] `state.py`, `llm.py`
 6. [x] `fundamentals_analyst` standalone — confirm output before wiring the graph
 7. [x] remaining four agents
@@ -112,12 +112,12 @@ Explain each file to the user in 2-4 sentences of plain English as it is created
   3.6 ignores the temperature setting; 3.5 respects it, which is why 3.5 is default.
 * **Gemini returns `message.content` as a LIST of blocks, not a string.** `llm.py`
   must normalise it to text, or every downstream `.strip()` breaks.
-* **Finnhub free plans 403 on Indian tickers** — `news.py` catches that and falls
+* **Finnhub free plans 403 on non-US tickers** — `news.py` catches that and falls
   back to Yahoo. Do not "fix" the fallback by only checking for an empty list.
-* **StockTwits 404/403s on `.NS` tickers** — expected; yields "insufficient data".
-* **Yahoo row labels are consistent across US and Indian listings** ("Total Revenue",
-  "Stockholders Equity", "Capital Expenditure"), so `FIELD_MAP` in statements.py works
-  for both. TATAELXSI.NS gives 12 of 12 fields across 5 years.
+* **StockTwits 404/403s on non-US tickers** — expected; yields "insufficient data".
+* **Yahoo row labels are consistent across exchanges** ("Total Revenue",
+  "Stockholders Equity", "Capital Expenditure"), so one `FIELD_MAP` in statements.py
+  covers them all. A typical US listing gives 12 of 12 fields across 5 years.
 
 ## Model provider
 

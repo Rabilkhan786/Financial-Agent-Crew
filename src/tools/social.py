@@ -24,7 +24,7 @@ from src import cache, config
 log = config.get_logger(__name__)
 
 # Where retail investors actually discuss individual stocks.
-SUBREDDITS = ["stocks", "investing", "StockMarket", "wallstreetbets", "IndianStockMarket"]
+SUBREDDITS = ["stocks", "investing", "StockMarket", "wallstreetbets", "ValueInvesting"]
 
 MIN_POSTS = config.MIN_SOCIAL_POSTS       # below this, the answer is "insufficient data"
 DEFAULT_LIMIT = config.SOCIAL_LIMIT
@@ -136,7 +136,7 @@ def fetch_social_posts(ticker, company=None, limit=DEFAULT_LIMIT, use_cache=True
         else:
             raw = produce()
     except urllib.error.HTTPError as error:
-        # A ticker with no StockTwits page returns 404 — common for Indian listings.
+        # A ticker with no StockTwits page returns 404, common outside the US.
         raw = {"source": "StockTwits", "posts": [],
                "error": f"social lookup failed (HTTP {error.code})"}
     except Exception as error:  # a missing key, a network blip, a changed response shape
