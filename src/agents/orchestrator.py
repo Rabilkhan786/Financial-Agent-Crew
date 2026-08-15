@@ -6,7 +6,7 @@ agent can fix it. The loop is capped so two agents cannot argue forever.
 """
 
 from src import config, llm, state
-from src.tools import market_data
+from src.tools import market_data, sourcing
 
 log = config.get_logger(__name__)
 
@@ -120,6 +120,25 @@ def review(crew_state):
             "revision_reason": reason,
             "revision_count": done + 1,
             "conflicts": crew_state.get("conflicts", []) + missed,
+            "conversation_log": [state.note("orchestrator_review", reason)],
+        }
+
+    # Second certain check: did the report state a number that came from
+    # nowhere? The model is told to quote only what it was given, but it will
+    # sometimes reach into its own memory - turning a sourced "34% jump" into
+    # an invented "34-45%" range. A made-up figure in a financial report is the
+    # worst thing this project can produce, so it goes back.
+    invented = sourcing.unsourced_numbers(crew_state)
+    if invented:
+        reason = ("These numbers appear in the report but come from no calculation "
+                  "and no fetched article: " + ", ".join(invented)
+                  + ". Remove them or replace them with figures that were supplied.")
+        log.info("orchestrator_review: unsourced numbers %s - sending back", invented)
+        return {
+            "revision_target": "fundamentals_analyst",
+            "revision_reason": reason,
+            "revision_count": done + 1,
+            "conflicts": crew_state.get("conflicts", []) + [reason],
             "conversation_log": [state.note("orchestrator_review", reason)],
         }
 

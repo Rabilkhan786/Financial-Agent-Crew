@@ -117,6 +117,21 @@ off, so the writer states a figure it never had to work out.
 The reviewer then checks, in Python, that every flag actually appears in the
 report. A report that quietly drops a bad finding gets sent back.
 
+### Invented numbers are rejected, not just noticed
+
+`src/tools/sourcing.py` checks that every figure in the report traces back to
+either a calculation or a headline the crew actually fetched. Anything else the
+model brought from its own memory, and the reviewer sends the report back.
+
+This was written because it kept happening. In one run a real headline said
+Yes Bank profit "rose 34%" and the report turned it into "34-45%" - the 34 was
+sourced, the 45 was invented to make a tidy range. Elsewhere a price target of
+1,199 and a "$20 billion capital raise" appeared, neither in any fetched
+article. Telling the model not to do this in the prompt was not enough.
+
+The reviewer and the eval call the same function, so the eval measures the
+guard the app actually runs rather than a copy of it that can drift.
+
 ### Why LangGraph and not a chain
 
 Because of one edge: `orchestrator_review` can send the work **back** to an

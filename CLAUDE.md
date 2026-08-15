@@ -34,6 +34,10 @@ force-accepts. `graph.invoke` is called with `recursion_limit=25`.
    interprets numbers it is handed.
 2. `src/agents/report_writer.py` imports nothing from `src/tools/`. It reads state and writes.
 3. Red flags are deterministic rules in `ratios.py`, not LLM opinion.
+3b. Every number in the report must trace to a calculation or a fetched headline.
+   `src/tools/sourcing.py` is the one implementation; `orchestrator.review` sends a
+   report back when it finds one that does not, and `evals/run_eval.py` imports the
+   same function so the eval tests the real guard.
 4. Social sentiment (`src/tools/social.py`) is optional. Missing keys -> the app still
    runs. Fewer than 5 posts -> `social_sentiment = "insufficient data"`, set before the
    LLM sees anything.

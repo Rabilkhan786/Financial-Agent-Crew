@@ -16,7 +16,8 @@ import math
 import re
 import sys
 
-from src import config, formatting, graph
+from src import config, graph
+from src.tools import sourcing
 
 log = config.get_logger(__name__)
 
@@ -33,110 +34,12 @@ REQUIRED_SECTIONS = [
     "Recommendation", "Red flags",
 ]
 
-# Numbers that are always allowed in the text: years, small counts, and the
-# percentages the rules themselves talk about.
-ALWAYS_ALLOWED = {"0", "1", "2", "3", "4", "5", "50", "70", "100", "200", "2.0"}
-
-
-def numbers_we_calculated(result):
-    """Every number the report is allowed to use, as text.
-
-    Each value is written out several ways because the model may print 0.18 as
-    18%, 18.0% or 0.18 and all of those are honest.
-    """
-    allowed = set(ALWAYS_ALLOWED)
-
-    def remember(value):
-        if value is None or isinstance(value, bool):
-            return
-        try:
-            number = float(value)
-        except (TypeError, ValueError):
-            return
-        if math.isnan(number):
-            return
-        for text in (f"{number:.0f}", f"{number:.1f}", f"{number:.2f}",
-                     f"{number * 100:.0f}", f"{number * 100:.1f}",
-                     f"{abs(number):.1f}", f"{abs(number) * 100:.1f}",
-                     f"{number / 1_000_000:.1f}", f"{number / 1_000_000_000:.2f}",
-                     f"{number / 1_000_000_000:.1f}"):
-            allowed.add(text.lstrip("-"))
-
-    fundamentals = result.get("fundamentals", {})
-    analysis = result.get("analysis", {})
-
-    for value in fundamentals.get("metrics", {}).values():
-        remember(value)
-    for value in analysis.get("kpis", {}).values():
-        remember(value)
-    for name in ("pe", "pb"):
-        found = fundamentals.get("valuation", {}).get(name)
-        if found:
-            remember(found.get("current"))
-            remember(found.get("median"))
-            remember(found.get("premium_pct"))
-    against_index = analysis.get("benchmark")
-    if against_index:
-        for key in ("stock_return", "benchmark_return", "excess_return"):
-            remember(against_index.get(key))
-    for column in fundamentals.get("series", {}).values():
-        for value in column.dropna().tolist():
-            remember(value)
-
-    # The social post counts are worked out in Python too, so "16 out of 30
-    # posts" is a calculated figure like any other.
-    research = result.get("research", {})
-    for value in (research.get("social", {}).get("tally", {}) or {}).values():
-        remember(value)
-    remember(research.get("social", {}).get("post_count"))
-
-    # The news sentiment score comes from Alpha Vantage, not from the model.
-    sentiment = research.get("news_sentiment") or {}
-    remember(sentiment.get("average_score"))
-    remember(sentiment.get("articles_scored"))
-
-    # A number quoted from a headline we actually fetched is sourced, not
-    # invented. "$20 billion capital raise" is fine if a real article said it.
-    for article in research.get("articles", []):
-        text = tidy(f"{article.get('title', '')} {article.get('summary', '')}")
-        for written in re.findall(r"\d+(?:\.\d+)?", text):
-            allowed.add(written)
-
-    # Years are always fine to mention.
-    for year in range(2015, 2036):
-        allowed.add(str(year))
-    return allowed
-
-
-# Dates are not figures. Both "2023-01-01" and "August 13, 2026" must not be
-# read as the numbers 01, 13 and so on.
-DATE_PATTERN = re.compile(
-    r"\d{4}-\d{2}-\d{2}"
-    r"|(?:January|February|March|April|May|June|July|August|September|October"
-    r"|November|December)\s+\d{1,2},?\s+\d{4}")
-
-
-# Index names contain digits that are not measurements.
-INDEX_NAMES = ["S&P 500", "S&P500", "NIFTY 50", "NIFTY50", "Nasdaq 100",
-               "FTSE 100", "BSE 500", "Magnificent Seven"]
-
-
-def tidy(text):
-    """Normalise text before pulling numbers out of it.
-
-    Reports use narrow no-break spaces, and both reports and headlines write
-    thousands with commas. "105,263" is one number, not a 105 and a 263.
-    """
-    text = (text or "").replace(" ", " ").replace(" ", " ").replace("‑", "-")
-    return re.sub(r"(?<=\d),(?=\d)", "", text)
-
-
-def numbers_in(report):
-    """Every number written in the report, ignoring dates and index names."""
-    text = DATE_PATTERN.sub(" ", tidy(report))
-    for name in INDEX_NAMES:
-        text = text.replace(name, " ")
-    return re.findall(r"\d+(?:\.\d+)?", text)
+def check_no_invented_numbers_detail(result):
+    """Check 2 uses exactly the guard the reviewer uses, so the eval measures
+    the real thing rather than a copy that can drift away from it."""
+    unknown = sourcing.unsourced_numbers(result)
+    return {"passed": not unknown, "detail": unknown[:15],
+            "checked": len(sourcing.numbers_in(result.get("report", "")))}
 
 
 def check_no_blanks(result):
@@ -151,14 +54,8 @@ def check_no_blanks(result):
 
 
 def check_no_invented_numbers(result):
-    """Check 2: every number in the report traces back to a calculation."""
-    allowed = numbers_we_calculated(result)
-    unknown = []
-    for written in numbers_in(result.get("report", "")):
-        if written.lstrip("-") not in allowed:
-            unknown.append(written)
-    return {"passed": not unknown, "detail": sorted(set(unknown))[:15],
-            "checked": len(numbers_in(result.get("report", "")))}
+    """Check 2: every number in the report traces back to a real source."""
+    return check_no_invented_numbers_detail(result)
 
 
 def check_sections_present(result):

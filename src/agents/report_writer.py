@@ -60,8 +60,11 @@ Write the report with exactly these headings, in this order:
 ## Recommendation
 
 Rules:
-- Use only the numbers given above. Never invent, round differently, or
-  estimate a figure. If a number is not listed, do not state one.
+- Use only the numbers given above, or numbers that appear in the news
+  headlines you were shown. Never invent, round differently, or estimate a
+  figure. If a number is not listed, do not state one.
+- Do not turn a single figure into a range. If a headline says profit rose 34%,
+  write 34%, not "34-45%".
 - Anything listed as a data gap must be described as unavailable.
 - Every red flag must appear in the report. Do not soften or skip one.
 - Under Recommendation, give a view (for example: worth a closer look, wait,
