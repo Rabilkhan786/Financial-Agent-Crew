@@ -46,6 +46,10 @@ docker build -t crew .
 docker run --env-file .env -p 8501:8501 crew
 ```
 
+Verified: the image builds at 983MB, serves the app on 8501, reads the keys from
+`--env-file`, reaches Yahoo Finance, and runs the full test suite inside the
+container. Keys are never baked into the image.
+
 Tests and the eval:
 
 ```bash
