@@ -129,8 +129,10 @@ Explain each file to the user in 2-4 sentences of plain English as it is created
 reads it.
 
 * **gemini** - free tier is 20 requests/day per model, too small for a ten-company eval.
-* **groq** - free allowance is far larger, 70B-class models, about a second per call.
-  This is the one to use for evals.
+* **groq** - the default. Free tier limits tokens per minute *per model*:
+  `llama-3.3-70b-versatile` allows 12000, `openai/gpt-oss-120b` only 8000, so the
+  70b is the default despite being smaller. A ten-company eval brushes the limit;
+  `llm.ask()` reads the "try again in Xs" out of the 429 and waits exactly that.
 * **ollama** - runs locally, no key and no limit, but only as fast as the machine.
   Measured on this laptop (i5-1334U, no discrete GPU, Intel Iris Xe): **6.2 tokens/sec**
   with qwen3:8b, so roughly 8-10 minutes per company against about 1 minute on Groq.
