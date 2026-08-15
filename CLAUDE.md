@@ -43,8 +43,7 @@ force-accepts. `graph.invoke` is called with `recursion_limit=25`.
    verified. StockTwits returns 200 with no key and its posts carry self-declared
    Bullish/Bearish tags, so sentiment is counted rather than inferred. Either backend
    failing degrades to "insufficient data" — it never breaks a run.
-5. Missing statement data (common for Indian smallcaps) is reported as unavailable,
-   never inferred by the LLM.
+5. Missing statement data is reported as unavailable, never inferred by the LLM.
 6. `src/cache.py` from the start — disk cache keyed by ticker+date for yfinance, news, Reddit.
 7. fpdf2: sanitise every string to latin-1, and call `set_x(l_margin)` before each `multi_cell`.
 8. LangSmith: read `LANGSMITH_TRACING`, `LANGSMITH_API_KEY`, `LANGSMITH_PROJECT` from `.env`.
@@ -90,7 +89,7 @@ Docker uses the same `requirements.txt` via uv, so container and laptop match.
 8. [x] `graph.py`
 9. [x] `charts.py`, `report_pdf.py`
 10. [x] `app.py`
-11. [x] `evals/run_eval.py` — 10 tickers, three rule checks
+11. [x] `evals/run_eval.py` — 10 US tickers, three rule checks
 12. [x] README — design decisions, why LangGraph, why the loop is capped, why KPIs are in Python
 
 ## Code style
@@ -154,3 +153,13 @@ run the log is the only way to see who asked for what, in which order.
 
 `.env` holds real keys and is gitignored. `.env.example` is committed and must never
 contain a real key. Required: `GOOGLE_API_KEY`. Optional: LangSmith and Reddit keys.
+
+## Portfolio scope (user decision, 2026-08-15)
+
+**US companies only.** The eval roster is ten US listings: AAPL, MSFT, JNJ, KO, PG
+(healthy) and F, T, INTC, BA, WBA (chosen to set off red flags - Boeing has negative
+equity, Ford and AT&T are heavily borrowed, Intel burns cash, Walgreens is shrinking).
+
+The `.NS`/`.BO`/`.L` benchmark routing in `kpi.py` stays and is still unit tested: it
+is correct code and removing it would weaken the "beat the right index" argument. Just
+do not use Indian tickers in demos, the README or the eval.

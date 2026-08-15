@@ -48,7 +48,8 @@ def run(crew_state):
 
     if not profile.get("currency") and not profile.get("market_cap"):
         message = (f"Could not confirm {ticker} on Yahoo Finance. "
-                   "Check the symbol - Indian shares need .NS or .BO on the end.")
+                   "Check the symbol. US listings need no suffix; other "
+                   "exchanges do, such as .L for London.")
         log.warning("orchestrator: %s", message)
         return {"company": company,
                 "conversation_log": [state.note("orchestrator", message)],

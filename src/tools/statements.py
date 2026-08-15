@@ -7,9 +7,9 @@ provider-agnostic and could be pointed at a different source without changing a
 single ratio.
 
 Rule 5 of the project: a line item Yahoo does not have is reported as missing,
-never inferred, never quietly replaced by a similar-looking one. Missing data is
-common for smaller Indian listings, and a report that admits a gap is worth more
-than one that fills it with a guess.
+never inferred, never quietly replaced by a similar-looking one. Gaps are common
+for smaller companies and for anyone reporting unusual line items, and a report
+that admits a gap is worth more than one that fills it with a guess.
 """
 
 import pandas as pd

@@ -23,8 +23,8 @@ st.caption("Five agents research a company and write a fundamental analysis repo
 with st.sidebar:
     st.header("Company")
     ticker = st.text_input("Ticker", value="AAPL",
-                           help="Indian shares need .NS (NSE) or .BO (BSE), "
-                                "for example TATAELXSI.NS")
+                           help="A US listing, for example AAPL, MSFT or BA. "
+                                "Other exchanges need a suffix, such as .L or .NS.")
     today = dt.date.today()
     start_date = st.date_input("From", value=today - dt.timedelta(days=365 * 3))
     end_date = st.date_input("To", value=today)

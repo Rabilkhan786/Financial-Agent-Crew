@@ -135,7 +135,8 @@ the model.
 
 ### Missing data is reported, never inferred
 
-Common for smaller Indian listings. Anything Yahoo does not report comes back
+Common for smaller listings and for companies that report unusual line items.
+Anything Yahoo does not report comes back
 as `None`, is named in an `unavailable` list, and is printed in the report as
 unavailable. Ratios with a zero or negative denominator are left blank rather
 than shown — return on equity when equity is negative looks like a real number
@@ -172,14 +173,18 @@ Sharpe, the 50 and 200-day averages, and return against the right index. The
 benchmark is chosen from the ticker suffix (`.NS` → NIFTY, `.BO` → SENSEX,
 otherwise S&P 500), because beating "the market" only means something if it is
 the right market. Stock and index are trimmed to shared trading days before
-comparison.
+comparison. The project targets US listings; the suffix routing means a London
+or Indian ticker still works, it is simply not what the eval covers.
 
 ---
 
 ## Evaluation
 
-`evals/run_eval.py` runs ten companies — five US, five Indian, deliberately
-including struggling ones — and checks three things per report:
+`evals/run_eval.py` runs ten US companies and checks three things per report.
+Five are healthy (AAPL, MSFT, JNJ, KO, PG) and five are chosen to set off the
+red-flag rules — Boeing has negative equity, Ford and AT&T carry heavy debt,
+Intel burns cash, Walgreens has falling revenue. An eval where nothing is ever
+flagged proves nothing:
 
 1. **No blanks.** A NaN reaching the report means a calculation failed quietly.
 2. **No invented numbers.** Every figure in the report must trace back to a
@@ -254,9 +259,9 @@ Things found by running the code, not by reading docs:
   `gemini-3.6-flash`. 3.6 silently ignores the temperature setting; 3.5 respects it.
 - Gemini 3 returns `message.content` as a **list of blocks, not a string**.
   `llm.text_of()` flattens it, or every caller breaks on `.strip()`.
-- Finnhub's free plan returns **403** for Indian tickers, so `news.py` falls back
+- Finnhub's free plan returns **403** for non-US tickers, so `news.py` falls back
   to Yahoo on any error, not just on an empty result.
 - Reddit blocks unauthenticated JSON entirely (403 on every endpoint), which is
   why StockTwits is the keyless default.
-- Yahoo's statement row labels are the same for US and Indian listings, so one
-  field map covers both.
+- Yahoo's statement row labels are consistent across exchanges, so one field map
+  covers US listings and everything else alike.

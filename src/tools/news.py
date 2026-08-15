@@ -169,9 +169,9 @@ def fetch_news(ticker, limit=DEFAULT_LIMIT, days=DEFAULT_DAYS, use_cache=True):
         articles: list[dict] = []
         source = "Yahoo Finance"
         if finnhub_key:
-            # Free Finnhub plans cover US listings but refuse others outright
-            # (a 403 on an Indian ticker, for instance). Either an error or an
-            # empty result falls back to Yahoo rather than losing the news.
+            # Free Finnhub plans cover US listings but refuse other exchanges
+            # outright, with a 403 rather than an empty list. Either an error or
+            # an empty result falls back to Yahoo rather than losing the news.
             try:
                 articles = _fetch_finnhub(ticker, limit, days, finnhub_key)
                 source = "Finnhub"

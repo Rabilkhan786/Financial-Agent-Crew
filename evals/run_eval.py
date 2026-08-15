@@ -20,10 +20,12 @@ from src import config, formatting, graph
 
 log = config.get_logger(__name__)
 
-# A mix of US and Indian companies, large and small, healthy and struggling,
-# so the checks are not all run against easy cases.
-TICKERS = ["AAPL", "MSFT", "KO", "F", "INTC",
-           "RELIANCE.NS", "TATAELXSI.NS", "INFY.NS", "ITC.NS", "YESBANK.NS"]
+# Ten US companies, picked so the checks are not all run against easy cases.
+# Five are healthy, five are meant to set off the red-flag rules: Boeing has
+# negative equity, Ford and AT&T carry heavy debt, Intel burns cash, and
+# Walgreens has falling revenue. A run where nothing is flagged proves nothing.
+TICKERS = ["AAPL", "MSFT", "JNJ", "KO", "PG",
+           "F", "T", "INTC", "BA", "WBA"]
 
 REQUIRED_SECTIONS = [
     "Executive summary", "Business quality", "Growth", "Profitability",
