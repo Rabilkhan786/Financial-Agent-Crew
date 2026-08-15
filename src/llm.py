@@ -6,6 +6,7 @@ instead of being copied into five agents.
 """
 
 import json
+import time
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 
@@ -77,13 +78,26 @@ def text_of(reply):
     return "".join(parts).strip()
 
 
-def ask(prompt):
-    """Send a prompt, get text back. Returns "" if the call fails."""
-    try:
-        return text_of(get_llm().invoke(prompt))
-    except Exception as error:
-        log.error("model call failed: %s", error)
-        return ""
+def ask(prompt, attempts=3):
+    """Send a prompt, get text back. Returns "" if it keeps failing.
+
+    Free plans limit tokens per minute, and running several companies in a row
+    hits that. The limit clears in seconds, so waiting and trying again turns a
+    lost report into a slightly slower one. Without this a single 429 left the
+    report as a stub.
+    """
+    for attempt in range(attempts):
+        try:
+            return text_of(get_llm().invoke(prompt))
+        except Exception as error:
+            last = error
+            if attempt < attempts - 1:
+                pause = 5 * (attempt + 1)
+                log.warning("model call failed (%s), waiting %ds and trying again",
+                            str(error)[:90], pause)
+                time.sleep(pause)
+    log.error("model call failed after %d attempts: %s", attempts, last)
+    return ""
 
 
 def _strip_code_fence(text):

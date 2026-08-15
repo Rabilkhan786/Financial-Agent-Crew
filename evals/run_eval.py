@@ -88,6 +88,11 @@ def numbers_we_calculated(result):
         remember(value)
     remember(research.get("social", {}).get("post_count"))
 
+    # The news sentiment score comes from Alpha Vantage, not from the model.
+    sentiment = research.get("news_sentiment") or {}
+    remember(sentiment.get("average_score"))
+    remember(sentiment.get("articles_scored"))
+
     # A number quoted from a headline we actually fetched is sourced, not
     # invented. "$20 billion capital raise" is fine if a real article said it.
     for article in research.get("articles", []):
@@ -109,10 +114,20 @@ DATE_PATTERN = re.compile(
     r"|November|December)\s+\d{1,2},?\s+\d{4}")
 
 
+# Index names contain digits that are not measurements.
+INDEX_NAMES = ["S&P 500", "S&P500", "NIFTY 50", "NIFTY50", "Nasdaq 100",
+               "FTSE 100", "BSE 500", "Magnificent Seven"]
+
+
 def numbers_in(report):
-    """Every number written in the report, ignoring dates."""
-    without_dates = DATE_PATTERN.sub(" ", report or "")
-    return re.findall(r"\d+(?:\.\d+)?", without_dates)
+    """Every number written in the report, ignoring dates and index names."""
+    text = (report or "").replace(" ", " ").replace(" ", " ").replace("‑", "-")
+    text = DATE_PATTERN.sub(" ", text)
+    for name in INDEX_NAMES:
+        text = text.replace(name, " ")
+    # "3,807.45" is one number, not a 3 and an 807.45.
+    text = re.sub(r"(?<=\d),(?=\d)", "", text)
+    return re.findall(r"\d+(?:\.\d+)?", text)
 
 
 def check_no_blanks(result):
@@ -156,8 +171,13 @@ def evaluate(ticker, start_date, end_date):
         "ticker": ticker,
         "company": result.get("company"),
         "report": result.get("report", ""),
+        "fundamentals": {"metrics": result.get("fundamentals", {}).get("metrics", {}),
+                         "valuation": result.get("fundamentals", {}).get("valuation", {})},
+        "analysis": {"kpis": result.get("analysis", {}).get("kpis", {}),
+                     "benchmark": result.get("analysis", {}).get("benchmark")},
         "research": {"articles": result.get("research", {}).get("articles", []),
-                     "social": result.get("research", {}).get("social", {})},
+                     "social": result.get("research", {}).get("social", {}),
+                     "news_sentiment": result.get("research", {}).get("news_sentiment")},
         "report_length": len(result.get("report", "")),
         "revisions": result.get("revision_count", 0),
         "errors": result.get("errors", []),
