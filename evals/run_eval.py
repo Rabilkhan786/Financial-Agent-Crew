@@ -96,7 +96,7 @@ def numbers_we_calculated(result):
     # A number quoted from a headline we actually fetched is sourced, not
     # invented. "$20 billion capital raise" is fine if a real article said it.
     for article in research.get("articles", []):
-        text = f"{article.get('title', '')} {article.get('summary', '')}"
+        text = tidy(f"{article.get('title', '')} {article.get('summary', '')}")
         for written in re.findall(r"\d+(?:\.\d+)?", text):
             allowed.add(written)
 
@@ -119,14 +119,21 @@ INDEX_NAMES = ["S&P 500", "S&P500", "NIFTY 50", "NIFTY50", "Nasdaq 100",
                "FTSE 100", "BSE 500", "Magnificent Seven"]
 
 
+def tidy(text):
+    """Normalise text before pulling numbers out of it.
+
+    Reports use narrow no-break spaces, and both reports and headlines write
+    thousands with commas. "105,263" is one number, not a 105 and a 263.
+    """
+    text = (text or "").replace(" ", " ").replace(" ", " ").replace("‑", "-")
+    return re.sub(r"(?<=\d),(?=\d)", "", text)
+
+
 def numbers_in(report):
     """Every number written in the report, ignoring dates and index names."""
-    text = (report or "").replace(" ", " ").replace(" ", " ").replace("‑", "-")
-    text = DATE_PATTERN.sub(" ", text)
+    text = DATE_PATTERN.sub(" ", tidy(report))
     for name in INDEX_NAMES:
         text = text.replace(name, " ")
-    # "3,807.45" is one number, not a 3 and an 807.45.
-    text = re.sub(r"(?<=\d),(?=\d)", "", text)
     return re.findall(r"\d+(?:\.\d+)?", text)
 
 

@@ -168,7 +168,29 @@ including struggling ones — and checks three things per report:
    calculated value. This is the check that proves the model is not doing maths.
 3. **All sections present.**
 
-### Known limit: the Gemini free tier
+### Results (10 companies, Groq `openai/gpt-oss-120b`)
+
+| Check | Result |
+|---|---|
+| No blanks | **10 / 10** |
+| All sections present | **10 / 10** |
+| No unsourced numbers | **8 / 10** |
+
+The two failures are real and worth reading. Infosys quoted an analyst target
+of `1,199` and YesBank turned a sourced "34% jump in profit" into an invented
+"34-45%" range. Neither figure appears in any article the crew fetched, so the
+model supplied them from its own knowledge despite being told not to. The check
+exists to catch exactly that.
+
+Getting there meant fixing five false positives in the checker first: dates in
+both ISO and prose form, thousands separators splitting `3,807.45` into two
+numbers, index names like `S&P 500`, the Alpha Vantage sentiment score, and the
+StockTwits tally (which is counted in Python, so `16 out of 30 posts` is a
+calculated figure). Reports also use narrow no-break spaces, which stopped the
+index names matching until the text was normalised. A noisy check hides the
+real findings.
+
+### Known limit: free-tier rate limits
 
 A full run needs roughly five model calls per company. The free tier allows
 **20 requests per day per model**, so a ten-company eval cannot complete in one
