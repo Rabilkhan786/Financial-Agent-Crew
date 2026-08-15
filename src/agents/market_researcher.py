@@ -6,7 +6,7 @@ is what lets the orchestrator later notice when the two disagree.
 """
 
 from src import config, llm, state
-from src.tools import market_data, news, social
+from src.tools import market_data, news, social, sourcing
 
 log = config.get_logger(__name__)
 
@@ -30,6 +30,9 @@ Write 2 short paragraphs in plain English:
 
 Rules:
 - Only use the headlines listed above. Do not add events you remember.
+- Every number you write must appear in the headlines above. If a headline says
+  profit rose 34%, write 34%. Do not widen it to "34-45%", do not round it, and
+  do not add a figure of your own such as a price target or a deal size.
 - If the chatter says "insufficient data", say so plainly and move on. Do not
   guess at a mood from nothing.
 - Do not predict the share price.
@@ -80,6 +83,25 @@ def run(crew_state):
         news_sentiment=news_sentiment,
         revision=revision,
     ))
+
+    # Check the researcher against its own sources before the summary travels on.
+    # The report writer treats this text as supplied fact, so a number invented
+    # here becomes a number in the final report.
+    sources = {"research": {"articles": headlines["articles"], "social": chatter}}
+    invented = sourcing.unsourced_numbers(sources, summary_text)
+    if invented:
+        log.warning("market_researcher: %s not in any headline - asking again", invented)
+        summary_text = llm.ask(
+            PROMPT.format(
+                company=company, ticker=ticker,
+                sector=profile.get("sector") or "unknown",
+                headlines=_headline_text(headlines["articles"]),
+                social_sentiment=chatter["social_sentiment"],
+                news_sentiment=news_sentiment,
+                revision=(f"Your last answer used these numbers, which appear in no "
+                          f"headline: {', '.join(invented)}. Write it again without "
+                          "them. Use only figures printed in the headlines above."))
+        ) or summary_text
 
     summary = (f"Found {headlines['article_count']} articles via {headlines['source']} "
                f"and {chatter['post_count']} posts via {chatter['source']}.")

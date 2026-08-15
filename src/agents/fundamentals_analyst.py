@@ -40,7 +40,8 @@ Write 4 short paragraphs, in plain English, no jargon:
 4. Valuation - is the share expensive or cheap against its own history?
 
 Rules:
-- Quote only the numbers listed above. Never invent or estimate a figure.
+- Quote only the numbers listed above. Never invent or estimate a figure, and
+  never widen one into a range.
 - If something is listed as unavailable, say it is unavailable. Do not guess it.
 - Mention every flagged issue. Do not soften them.
 - No recommendation to buy or sell. That is not your job here.

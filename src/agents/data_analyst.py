@@ -28,7 +28,8 @@ Write 2 short paragraphs in plain English:
 2. How does that compare with the index, and what does the trend say now?
 
 Rules:
-- Quote only the numbers above. Do not calculate anything new.
+- Quote only the numbers above. Do not calculate anything new, and do not
+  widen a figure into a range.
 - Explain what a drawdown or a Sharpe ratio means in one short phrase.
 - Do not predict where the price goes next.
 """

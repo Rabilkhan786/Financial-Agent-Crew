@@ -1,7 +1,6 @@
 # Core agent crew
 langgraph
 langchain-core
-langchain-google-genai
 langchain-groq
 langchain-ollama
 langsmith
