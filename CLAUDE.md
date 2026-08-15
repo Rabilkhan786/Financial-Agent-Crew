@@ -122,10 +122,20 @@ Explain each file to the user in 2-4 sentences of plain English as it is created
 
 ## Model provider
 
-`LLM_PROVIDER` in `.env` is either `gemini` (default) or `groq`. Only `llm.py` reads
-it. Groq exists because the Gemini free tier is 20 requests/day per model, which is
-too small for a ten-company eval; Groq's free allowance is far larger.
-`text_of()` already handles both shapes (Gemini returns a list of blocks, Groq a string).
+`LLM_PROVIDER` in `.env` is `gemini` (default), `groq` or `ollama`. Only `llm.py`
+reads it.
+
+* **gemini** - free tier is 20 requests/day per model, too small for a ten-company eval.
+* **groq** - free allowance is far larger, 70B-class models, about a second per call.
+  This is the one to use for evals.
+* **ollama** - runs locally, no key and no limit, but only as fast as the machine.
+  Measured on this laptop (i5-1334U, no discrete GPU, Intel Iris Xe): **6.2 tokens/sec**
+  with qwen3:8b, so roughly 8-10 minutes per company against about 1 minute on Groq.
+  Useful offline; too slow for the eval.
+  `reasoning=False` is required, or qwen3 leaks "/think" and `<think>` blocks into the report.
+
+`text_of()` already handles every shape (Gemini returns a list of blocks, Groq and
+Ollama return strings).
 
 ## Known limit
 

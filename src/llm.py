@@ -22,7 +22,20 @@ def get_llm():
     if _model is not None:
         return _model
 
-    if config.LLM_PROVIDER == "groq":
+    if config.LLM_PROVIDER == "ollama":
+        from langchain_ollama import ChatOllama
+
+        # reasoning=False turns off qwen3-style thinking. Left on, the model
+        # leaks "/think" and <think> blocks into the answer, which would end up
+        # printed in the report.
+        _model = ChatOllama(
+            model=config.OLLAMA_MODEL,
+            base_url=config.OLLAMA_BASE_URL,
+            temperature=config.LLM_TEMPERATURE,
+            reasoning=False,
+        )
+        log.info("using local Ollama model %s", config.OLLAMA_MODEL)
+    elif config.LLM_PROVIDER == "groq":
         from langchain_groq import ChatGroq
 
         if not config.GROQ_API_KEY:

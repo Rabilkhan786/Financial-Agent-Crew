@@ -36,6 +36,11 @@ GEMINI_MODEL = _get("GEMINI_MODEL", "gemini-3.5-flash")
 GROQ_API_KEY = _get("GROQ_API_KEY")
 GROQ_MODEL = _get("GROQ_MODEL", "llama-3.3-70b-versatile")
 
+# Ollama runs a model on this machine. No key and no limit, but it is only as
+# fast as the hardware, and a laptop without a discrete GPU is slow.
+OLLAMA_MODEL = _get("OLLAMA_MODEL", "qwen3:8b")
+OLLAMA_BASE_URL = _get("OLLAMA_BASE_URL", "http://localhost:11434")
+
 # --- Optional: tracing ------------------------------------------------------
 LANGSMITH_TRACING = _get("LANGSMITH_TRACING", "false").lower() in {"1", "true", "yes"}
 LANGSMITH_API_KEY = _get("LANGSMITH_API_KEY")
@@ -52,6 +57,7 @@ ALPHAVANTAGE_API_KEY = _get("ALPHAVANTAGE_API_KEY")
 # rule for "is this available?" lives in one place.
 HAS_GEMINI = bool(GOOGLE_API_KEY)
 HAS_GROQ = bool(GROQ_API_KEY)
+HAS_OLLAMA = LLM_PROVIDER == "ollama"
 HAS_LANGSMITH = bool(LANGSMITH_TRACING and LANGSMITH_API_KEY)
 HAS_REDDIT = bool(REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET)
 HAS_FINNHUB = bool(FINNHUB_API_KEY)
@@ -91,6 +97,8 @@ def missing_required():
 
     Only the key for the provider actually in use is required.
     """
+    if LLM_PROVIDER == "ollama":
+        return []                      # runs locally, no key to be missing
     if LLM_PROVIDER == "groq":
         return [] if GROQ_API_KEY else ["GROQ_API_KEY"]
     return [] if GOOGLE_API_KEY else ["GOOGLE_API_KEY"]
@@ -102,6 +110,7 @@ def enabled_sources():
     return {
         f"Gemini ({GEMINI_MODEL})": HAS_GEMINI and LLM_PROVIDER != "groq",
         f"Groq ({GROQ_MODEL})": HAS_GROQ and LLM_PROVIDER == "groq",
+        f"Ollama, local ({OLLAMA_MODEL})": HAS_OLLAMA,
         "Yahoo Finance (no key needed)": True,
         "LangSmith tracing": HAS_LANGSMITH,
         "Reddit posts": HAS_REDDIT,
