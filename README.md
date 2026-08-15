@@ -35,7 +35,7 @@ You need Python 3.11+ and [uv](https://docs.astral.sh/uv/).
 
 ```bash
 uv pip install -r requirements.txt
-cp .env.example .env        # then put your Gemini key in it
+cp .env.example .env        # then put your Groq key in it
 uv run --no-project streamlit run app.py
 ```
 
@@ -57,11 +57,13 @@ uv run --no-project python -m evals.run_eval
 
 ## Keys
 
-Only one is required.
+Only one is required, and which one depends on `LLM_PROVIDER`.
 
 | Key | Needed? | What it gives you |
 |---|---|---|
-| `GOOGLE_API_KEY` | **yes** | Gemini, which every agent uses |
+| `GROQ_API_KEY` | **yes, by default** | Groq. Free, and fast enough to run the whole eval |
+| `GOOGLE_API_KEY` | only if `LLM_PROVIDER=gemini` | Gemini. Free tier is 20 requests/day per model |
+| — | — | Nothing at all if `LLM_PROVIDER=ollama`: the model runs on your machine |
 | — | — | Yahoo Finance needs no key: prices, statements, news |
 | `FINNHUB_API_KEY` | no | Better news than Yahoo headlines (US listings only on the free plan) |
 | `ALPHAVANTAGE_API_KEY` | no | A sentiment score per article |
@@ -70,6 +72,22 @@ Only one is required.
 
 Missing optional keys switch features off; they never stop a run. The sidebar
 shows which sources are live.
+
+### Choosing a model
+
+`LLM_PROVIDER` takes `groq` (default), `gemini` or `ollama`. Only `src/llm.py`
+reads it, so switching changes nothing else in the project.
+
+| Provider | Per company | Ten-company eval | Key |
+|---|---|---|---|
+| **groq** | ~1 min | ~10 min | free |
+| gemini | ~1 min | cannot finish in a day (20 req/day) | free |
+| ollama | ~8-10 min | ~90 min | none, runs locally |
+
+Ollama timings were measured on an i5-1334U laptop with no discrete GPU running
+`qwen3:8b` at 6.2 tokens/sec. It needs `reasoning=False`, or qwen3 leaks
+`/think` markers into the report. Worth having because it needs no key at all;
+too slow to run the eval with.
 
 ---
 
