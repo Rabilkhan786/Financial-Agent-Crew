@@ -120,6 +120,13 @@ Explain each file to the user in 2-4 sentences of plain English as it is created
   "Stockholders Equity", "Capital Expenditure"), so `FIELD_MAP` in statements.py works
   for both. TATAELXSI.NS gives 12 of 12 fields across 5 years.
 
+## Model provider
+
+`LLM_PROVIDER` in `.env` is either `gemini` (default) or `groq`. Only `llm.py` reads
+it. Groq exists because the Gemini free tier is 20 requests/day per model, which is
+too small for a ten-company eval; Groq's free allowance is far larger.
+`text_of()` already handles both shapes (Gemini returns a list of blocks, Groq a string).
+
 ## Known limit
 
 Gemini free tier allows **20 requests per day per model**. One crew run uses about

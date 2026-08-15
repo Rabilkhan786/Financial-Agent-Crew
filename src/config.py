@@ -23,10 +23,18 @@ def _get(name, default=""):
     return os.getenv(name, default).strip().strip('"').strip("'")
 
 
-# --- Required ---------------------------------------------------------------
+# --- Which model to use -----------------------------------------------------
+# "gemini" or "groq". Groq is worth switching to when the Gemini free tier runs
+# out: its free allowance is much larger, so a ten-company eval finishes in one
+# sitting. Only llm.py reads this, so nothing else changes.
+LLM_PROVIDER = _get("LLM_PROVIDER", "gemini").lower()
+LLM_TEMPERATURE = float(_get("LLM_TEMPERATURE", "0.2") or 0.2)
+
 GOOGLE_API_KEY = _get("GOOGLE_API_KEY")
 GEMINI_MODEL = _get("GEMINI_MODEL", "gemini-3.5-flash")
-LLM_TEMPERATURE = float(_get("LLM_TEMPERATURE", "0.2") or 0.2)
+
+GROQ_API_KEY = _get("GROQ_API_KEY")
+GROQ_MODEL = _get("GROQ_MODEL", "llama-3.3-70b-versatile")
 
 # --- Optional: tracing ------------------------------------------------------
 LANGSMITH_TRACING = _get("LANGSMITH_TRACING", "false").lower() in {"1", "true", "yes"}
@@ -43,6 +51,7 @@ ALPHAVANTAGE_API_KEY = _get("ALPHAVANTAGE_API_KEY")
 # What is switched on. Read these rather than testing the keys by hand, so the
 # rule for "is this available?" lives in one place.
 HAS_GEMINI = bool(GOOGLE_API_KEY)
+HAS_GROQ = bool(GROQ_API_KEY)
 HAS_LANGSMITH = bool(LANGSMITH_TRACING and LANGSMITH_API_KEY)
 HAS_REDDIT = bool(REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET)
 HAS_FINNHUB = bool(FINNHUB_API_KEY)
@@ -78,7 +87,12 @@ MIN_SOCIAL_POSTS = 5              # below this, the answer is "insufficient data
 
 
 def missing_required():
-    """Which required settings are absent. Empty list means ready to run."""
+    """Which required settings are absent. Empty list means ready to run.
+
+    Only the key for the provider actually in use is required.
+    """
+    if LLM_PROVIDER == "groq":
+        return [] if GROQ_API_KEY else ["GROQ_API_KEY"]
     return [] if GOOGLE_API_KEY else ["GOOGLE_API_KEY"]
 
 
@@ -86,7 +100,8 @@ def enabled_sources():
     """What each optional key switches on — shown in the app so the user can
     see at a glance why a section of the report is thin."""
     return {
-        "Gemini (required)": HAS_GEMINI,
+        f"Gemini ({GEMINI_MODEL})": HAS_GEMINI and LLM_PROVIDER != "groq",
+        f"Groq ({GROQ_MODEL})": HAS_GROQ and LLM_PROVIDER == "groq",
         "Yahoo Finance (no key needed)": True,
         "LangSmith tracing": HAS_LANGSMITH,
         "Reddit posts": HAS_REDDIT,

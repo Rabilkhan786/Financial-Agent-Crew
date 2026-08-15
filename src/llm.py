@@ -17,9 +17,23 @@ _model = None
 
 
 def get_llm():
-    """The Gemini model, made once and reused."""
+    """The model, made once and reused. Gemini or Groq, set in .env."""
     global _model
-    if _model is None:
+    if _model is not None:
+        return _model
+
+    if config.LLM_PROVIDER == "groq":
+        from langchain_groq import ChatGroq
+
+        if not config.GROQ_API_KEY:
+            raise RuntimeError("LLM_PROVIDER is groq but GROQ_API_KEY is not set in .env")
+        _model = ChatGroq(
+            model=config.GROQ_MODEL,
+            api_key=config.GROQ_API_KEY,
+            temperature=config.LLM_TEMPERATURE,
+        )
+        log.info("using Groq model %s", config.GROQ_MODEL)
+    else:
         if not config.GOOGLE_API_KEY:
             raise RuntimeError("GOOGLE_API_KEY is not set in .env")
         _model = ChatGoogleGenerativeAI(
@@ -27,7 +41,7 @@ def get_llm():
             google_api_key=config.GOOGLE_API_KEY,
             temperature=config.LLM_TEMPERATURE,
         )
-        log.info("using model %s", config.GEMINI_MODEL)
+        log.info("using Gemini model %s", config.GEMINI_MODEL)
     return _model
 
 
