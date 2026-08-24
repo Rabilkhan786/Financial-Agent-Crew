@@ -48,12 +48,17 @@ def metrics_table(values, currency=None):
     return pd.DataFrame(rows)
 
 
-if run_it:
-    if config.missing_required():
-        st.stop()
-    with st.spinner(f"Running the crew on {ticker}. This takes a minute or two."):
-        st.session_state["result"] = graph.run_crew(
-            ticker, str(start_date), str(end_date))
+if run_it and not config.missing_required():
+    # Show each agent as it finishes instead of a blank spinner. The snapshots
+    # come from LangGraph's stream, so nothing here tracks progress by hand.
+    with st.status(f"Running the crew on {ticker}", expanded=True) as running:
+        shown = 0
+        for snapshot in graph.stream_crew(ticker, str(start_date), str(end_date)):
+            for entry in snapshot.get("conversation_log", [])[shown:]:
+                st.write(f"**{entry['agent']}** - {entry['message']}")
+                shown += 1
+        st.session_state["result"] = snapshot
+        running.update(label=f"Finished {ticker}", state="complete", expanded=False)
 
 result = st.session_state.get("result")
 

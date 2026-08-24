@@ -169,3 +169,22 @@ equity, Ford and AT&T are heavily borrowed, Intel burns cash, Walgreens is shrin
 The `.NS`/`.BO`/`.L` benchmark routing in `kpi.py` stays and is still unit tested: it
 is correct code and removing it would weaken the "beat the right index" argument. Just
 do not use Indian tickers in demos, the README or the eval.
+
+## Framework over hand-written code (2026-08-25)
+
+Following *Generative AI with LangChain* (Auffarth & Kuligin):
+
+* **Structured output** (`llm.ask_structured` + a pydantic model) replaced the
+  hand-written `ask_json`, code-fence stripping and reparse loop. The reviewer's
+  answer is now a `ReviewDecision` object, ch.5.
+* **`graph.stream(stream_mode="values")`** (ch.6) replaced the blocking invoke.
+  `stream_crew` yields a state snapshot per step; `run_crew` keeps the last one,
+  so the app and the eval share one implementation. The app shows each agent as
+  it finishes.
+* Versions are kept current: langgraph 1.2.11, langchain-core 1.6.0,
+  langchain-google-genai 4.3.5, langsmith 0.11.1, streamlit 1.62.0.
+
+Kept hand-written on purpose: the retry in `llm.ask`. It reads the "try again in
+Xs" out of a 429 and waits exactly that. A generic exponential backoff was tried
+and measured - it left four of ten reports as stubs, because Groq's
+tokens-per-minute window is longer than the backoff reached.

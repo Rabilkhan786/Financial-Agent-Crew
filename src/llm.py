@@ -117,32 +117,16 @@ def ask(prompt, attempts=4):
     return ""
 
 
-def _strip_code_fence(text):
-    """Remove the ```json ... ``` wrapper models often add."""
-    text = text.strip()
-    if text.startswith("```"):
-        text = text.split("\n", 1)[-1]          # drop the opening fence line
-        text = text.rsplit("```", 1)[0]         # drop the closing fence
-    return text.strip()
+def ask_structured(prompt, schema):
+    """Send a prompt and get back a filled-in schema object.
 
-
-def ask_json(prompt, retries=1):
-    """Send a prompt that should return JSON, and parse it.
-
-    Models sometimes wrap JSON in a code fence or add a sentence before it, so
-    one retry is allowed with a blunter instruction. An empty dict is returned
-    if it still is not valid JSON — the caller decides what to do about that,
-    because a failed parse must not stop the whole run.
+    LangChain asks the model to answer in the shape of the schema and parses
+    the reply itself. This replaces hand-written code that stripped ```json
+    fences and retried when the model wrapped its answer in a sentence.
+    Returns None if the model cannot be reached.
     """
-    for attempt in range(retries + 1):
-        reply = ask(prompt if attempt == 0
-                    else prompt + "\n\nReturn only valid JSON. No other text.")
-        if not reply:
-            continue
-        try:
-            parsed = json.loads(_strip_code_fence(reply))
-            if isinstance(parsed, dict):
-                return parsed
-        except json.JSONDecodeError:
-            log.warning("reply was not valid JSON (attempt %d)", attempt + 1)
-    return {}
+    try:
+        return get_llm().with_structured_output(schema).invoke(prompt)
+    except Exception as error:
+        log.error("structured call failed: %s", error)
+        return None

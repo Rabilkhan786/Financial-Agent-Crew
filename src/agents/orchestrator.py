@@ -5,10 +5,26 @@ and the market research do not agree, and sends the report back to whichever
 agent can fix it. The loop is capped so two agents cannot argue forever.
 """
 
+from pydantic import BaseModel, Field
+
 from src import config, llm, state
 from src.tools import market_data, sourcing
 
 log = config.get_logger(__name__)
+
+
+class ReviewDecision(BaseModel):
+    """What the reviewer is allowed to say.
+
+    LangChain fills this in from the model's reply, so there is no JSON to
+    parse by hand and no code fence to strip.
+    """
+
+    conflict: bool = Field(description="True only if there is a real contradiction")
+    target: str = Field(default="",
+                        description="fundamentals_analyst, market_researcher, or empty")
+    reason: str = Field(default="", description="one sentence saying what to fix")
+
 
 REVIEW_PROMPT = """You are reviewing a draft investment report for contradictions.
 
@@ -27,11 +43,6 @@ THE DRAFT REPORT
 Look for a real contradiction between these, for example: the fundamentals show
 falling margins but the research describes only good news, or a red flag was
 raised but the report does not mention it.
-
-Reply with JSON only:
-{{"conflict": true or false,
-  "target": "fundamentals_analyst" or "market_researcher" or "",
-  "reason": "one sentence saying exactly what to fix"}}
 
 Set conflict to false unless the disagreement is real and specific. A report
 that is merely short is not a contradiction.
@@ -146,17 +157,17 @@ def review(crew_state):
     research = crew_state.get("research", {})
     flags = fundamentals.get("red_flags", [])
 
-    answer = llm.ask_json(REVIEW_PROMPT.format(
+    answer = llm.ask_structured(REVIEW_PROMPT.format(
         fundamentals=fundamentals.get("interpretation") or "not available",
         research=research.get("summary") or "not available",
         flags="\n".join(f"- {flag['message']}" for flag in flags) or "- none",
         report=(crew_state.get("report") or "")[:6000],
-    ))
+    ), ReviewDecision)
 
-    target = answer.get("target", "")
+    target = answer.target if answer else ""
     valid = ("fundamentals_analyst", "market_researcher")
-    if answer.get("conflict") and target in valid:
-        reason = answer.get("reason", "The reviewer found a contradiction.")
+    if answer and answer.conflict and target in valid:
+        reason = answer.reason or "The reviewer found a contradiction."
         log.info("orchestrator_review: sending back to %s - %s", target, reason)
         return {
             "revision_target": target,

@@ -49,8 +49,14 @@ def build_graph():
     return graph.compile()
 
 
-def run_crew(ticker, start_date, end_date):
-    """Run the whole crew on one company and return the finished state."""
+def stream_crew(ticker, start_date, end_date):
+    """Run the crew, handing back the whole state each time an agent finishes.
+
+    LangGraph's stream does the work. stream_mode="values" yields a snapshot
+    of the state after every step, so the app can show progress as it happens
+    instead of sitting on a blank spinner for two minutes. Nothing here counts
+    steps or tracks progress by hand.
+    """
     crew = build_graph()
     starting_point = state.new_state(ticker, start_date, end_date)
 
@@ -68,7 +74,20 @@ def run_crew(ticker, start_date, end_date):
     }
 
     log.info("running the crew for %s", ticker)
-    finished = crew.invoke(starting_point, config=settings)
+    for snapshot in crew.stream(starting_point, config=settings, stream_mode="values"):
+        yield snapshot
+
+
+def run_crew(ticker, start_date, end_date):
+    """Run the whole crew on one company and return the finished state.
+
+    The same stream as above with only the last snapshot kept, so the app and
+    the eval share one implementation rather than two that can drift.
+    """
+    finished = {}
+    for snapshot in stream_crew(ticker, start_date, end_date):
+        finished = snapshot
+
     log.info("finished %s: %d log entries, %d errors",
              ticker, len(finished.get("conversation_log", [])),
              len(finished.get("errors", [])))
