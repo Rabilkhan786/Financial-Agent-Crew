@@ -3,13 +3,15 @@
 Groq, through LangChain. Everything that used to be hand-written here is now
 done by the framework:
 
-* `.with_retry()` handles rate limits, instead of our own loop and sleep.
+* `InMemoryRateLimiter` paces the calls so the free tier limit is not hit.
+* `.with_retry()` catches whatever still gets through.
 * `StrOutputParser()` pulls the text out of the reply.
 * `.with_structured_output()` fills in a schema, instead of parsing JSON and
   stripping code fences by hand.
 """
 
 from langchain_core.output_parsers import StrOutputParser
+from langchain_core.rate_limiters import InMemoryRateLimiter
 from langchain_groq import ChatGroq
 
 from src import config
@@ -22,19 +24,28 @@ _model = None
 def get_llm():
     """The model, made once and reused.
 
-    with_retry covers the tokens-per-minute limit on the free tier: running
-    several companies in a row hits it, and the limit clears in seconds.
+    The free tier allows a few thousand tokens a minute. Waiting for a 429 and
+    retrying was not enough - running ten companies in a row still lost reports
+    to it. Pacing the calls up front, and keeping the retry as a backstop, is
+    the more reliable order.
     """
     global _model
     if _model is None:
         if not config.GROQ_API_KEY:
             raise RuntimeError("GROQ_API_KEY is not set in .env")
+        pace = InMemoryRateLimiter(
+            requests_per_second=config.CALLS_PER_SECOND,
+            check_every_n_seconds=0.5,
+            max_bucket_size=2,
+        )
         _model = ChatGroq(
             model=config.GROQ_MODEL,
             api_key=config.GROQ_API_KEY,
             temperature=config.LLM_TEMPERATURE,
+            rate_limiter=pace,
         ).with_retry(stop_after_attempt=5, wait_exponential_jitter=True)
-        log.info("using %s", config.GROQ_MODEL)
+        log.info("using %s, paced at %s calls/second",
+                 config.GROQ_MODEL, config.CALLS_PER_SECOND)
     return _model
 
 

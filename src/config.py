@@ -28,6 +28,11 @@ GROQ_API_KEY = _get("GROQ_API_KEY")
 GROQ_MODEL = _get("GROQ_MODEL", "openai/gpt-oss-120b")
 LLM_TEMPERATURE = float(_get("LLM_TEMPERATURE", "0.2") or 0.2)
 
+# The free tier allows a few thousand tokens a minute, and one report uses a
+# lot of them. Pacing the calls keeps a ten-company run under the limit; the
+# retry in llm.py is only the backstop.
+CALLS_PER_SECOND = float(_get("CALLS_PER_SECOND", "0.12") or 0.12)
+
 # --- Optional: tracing ------------------------------------------------------
 LANGSMITH_TRACING = _get("LANGSMITH_TRACING", "false").lower() in {"1", "true", "yes"}
 LANGSMITH_API_KEY = _get("LANGSMITH_API_KEY")
