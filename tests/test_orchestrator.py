@@ -205,3 +205,21 @@ def test_every_decision_is_logged(monkeypatch):
         result = orchestrator.review(state)
         assert result["conversation_log"], "the reader must be able to see why"
         assert result["conversation_log"][0]["agent"] == "orchestrator_review"
+
+
+# --- The model answering in the wrong type ----------------------------------
+
+def test_a_string_true_counts_as_a_conflict(monkeypatch):
+    """Some models answer "true" rather than true, and the provider rejects the
+    call if the schema insists on a boolean. Both forms must work."""
+    monkeypatch.setattr(orchestrator.llm, "ask_structured", lambda *a, **k:
+                        orchestrator.ReviewDecision(conflict="true",
+                                                    target="market_researcher",
+                                                    reason="mismatch"))
+    assert orchestrator.review(crew(report="## S\nSteady."))["revision_target"] == "market_researcher"
+
+
+def test_a_string_false_is_not_a_conflict(monkeypatch):
+    monkeypatch.setattr(orchestrator.llm, "ask_structured", lambda *a, **k:
+                        orchestrator.ReviewDecision(conflict="false", target="", reason=""))
+    assert orchestrator.review(crew(report="## S\nSteady."))["revision_target"] == ""

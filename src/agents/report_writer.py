@@ -137,18 +137,27 @@ def run(crew_state):
 
     conflicts = ""
     if crew_state.get("conflicts"):
+        # Only the last few, and only the reviewer's most recent thinking. This
+        # list grows with every revision, and the prompt has a ceiling.
+        recent = crew_state["conflicts"][-3:]
         conflicts = ("THE REVIEWER RAISED THESE POINTS - you must address each one:\n"
-                     + "\n".join(f"- {item}" for item in crew_state["conflicts"]))
+                     + "\n".join(f"- {item[:400]}" for item in recent))
 
+    # Every piece is capped. A provider refuses outright any single request
+    # larger than its per-minute token allowance, and pasting three agents'
+    # full write-ups plus the growing revision notes went over it - the writer
+    # then produced nothing and the report came back as a stub. The numbers
+    # below are short because they are already worked out; it is the prose that
+    # has to be kept in check.
     body = llm.ask(PROMPT.format(
         company=crew_state.get("company") or ticker,
         ticker=ticker,
         start=crew_state.get("start_date"),
         end=crew_state.get("end_date"),
         currency=fundamentals.get("currency") or "unknown",
-        fundamentals=fundamentals.get("interpretation") or "not available",
-        research=research.get("summary") or "not available",
-        analysis=analysis.get("interpretation") or "not available",
+        fundamentals=(fundamentals.get("interpretation") or "not available")[:2000],
+        research=(research.get("summary") or "not available")[:1200],
+        analysis=(analysis.get("interpretation") or "not available")[:1200],
         facts=facts_from(crew_state),
         price_facts=price_facts_from(crew_state),
         flags=flags_from(crew_state),

@@ -45,6 +45,10 @@ def get_base():
             api_key=config.GROQ_API_KEY,
             temperature=config.LLM_TEMPERATURE,
             rate_limiter=pace,
+            # Reasoning models otherwise put their whole train of thought in
+            # the answer. It came out as an eight thousand character "report"
+            # that was mostly thinking, with the real headings buried inside.
+            reasoning_format="hidden",
         )
         log.info("using %s, paced at %s calls/second",
                  config.GROQ_MODEL, config.CALLS_PER_SECOND)

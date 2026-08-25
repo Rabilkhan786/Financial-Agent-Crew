@@ -20,7 +20,10 @@ class ReviewDecision(BaseModel):
     parse by hand and no code fence to strip.
     """
 
-    conflict: bool = Field(description="True only if there is a real contradiction")
+    # Deliberately not a plain bool. Some models answer "true" as a string, and
+    # the provider then rejects the whole call for not matching the schema -
+    # which silently cost us the check. Accept either and decide in code.
+    conflict: bool | str = Field(description="true or false")
     target: str = Field(default="",
                         description="fundamentals_analyst, market_researcher, or empty")
     reason: str = Field(default="", description="one sentence saying what to fix")
@@ -157,16 +160,22 @@ def review(crew_state):
     research = crew_state.get("research", {})
     flags = fundamentals.get("red_flags", [])
 
+    # Everything below is trimmed on purpose. A provider refuses outright any
+    # single request bigger than its per-minute token allowance, and sending
+    # the whole report plus every interpretation went over it - the reviewer
+    # then failed with "request too large" and no contradiction was ever found.
+    # The checks that need the full text are the deterministic ones above.
     answer = llm.ask_structured(REVIEW_PROMPT.format(
-        fundamentals=fundamentals.get("interpretation") or "not available",
-        research=research.get("summary") or "not available",
+        fundamentals=(fundamentals.get("interpretation") or "not available")[:1500],
+        research=(research.get("summary") or "not available")[:1000],
         flags="\n".join(f"- {flag['message']}" for flag in flags) or "- none",
-        report=(crew_state.get("report") or "")[:6000],
+        report=(crew_state.get("report") or "")[:2500],
     ), ReviewDecision)
 
     target = answer.target if answer else ""
     valid = ("fundamentals_analyst", "market_researcher")
-    if answer and answer.conflict and target in valid:
+    found_conflict = answer and str(answer.conflict).strip().lower() in ("true", "yes", "1")
+    if found_conflict and target in valid:
         reason = answer.reason or "The reviewer found a contradiction."
         log.info("orchestrator_review: sending back to %s - %s", target, reason)
         return {
