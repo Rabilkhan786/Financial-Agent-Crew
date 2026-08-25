@@ -84,7 +84,7 @@ reads it, so switching changes nothing else in the project.
 
 | Provider | Per company | Ten-company eval | Key |
 |---|---|---|---|
-| **groq** | ~1 min | ~10 min | free |
+| **groq** (`openai/gpt-oss-120b`) | ~1 min | ~10 min | free |
 | gemini | ~1 min | cannot finish in a day (20 req/day) | free |
 | ollama | ~8-10 min | ~90 min | none, runs locally |
 

@@ -34,7 +34,7 @@ GOOGLE_API_KEY = _get("GOOGLE_API_KEY")
 GEMINI_MODEL = _get("GEMINI_MODEL", "gemini-3.5-flash")
 
 GROQ_API_KEY = _get("GROQ_API_KEY")
-GROQ_MODEL = _get("GROQ_MODEL", "llama-3.3-70b-versatile")
+GROQ_MODEL = _get("GROQ_MODEL", "openai/gpt-oss-120b")
 
 # Ollama runs a model on this machine. No key and no limit, but it is only as
 # fast as the hardware, and a laptop without a discrete GPU is slow.

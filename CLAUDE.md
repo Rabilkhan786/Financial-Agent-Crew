@@ -129,10 +129,16 @@ Explain each file to the user in 2-4 sentences of plain English as it is created
 reads it.
 
 * **gemini** - free tier is 20 requests/day per model, too small for a ten-company eval.
-* **groq** - the default. Free tier limits tokens per minute *per model*:
-  `llama-3.3-70b-versatile` allows 12000, `openai/gpt-oss-120b` only 8000, so the
-  70b is the default despite being smaller. A ten-company eval brushes the limit;
-  `llm.ask()` reads the "try again in Xs" out of the 429 and waits exactly that.
+* **groq** - the default, `openai/gpt-oss-120b`. Two things learned the hard way:
+  - **Which models a key can reach varies by account.** A second key had 13 models
+    and no llama at all, so `llama-3.3-70b-versatile` 404ed everywhere. Always list
+    the models for the key in hand rather than trusting a name that worked before.
+  - Free tier limits **tokens per minute** (8000 here). A ten-company eval brushes
+    it; `llm.ask()` reads the "try again in Xs" out of the 429 and waits exactly that.
+  - `groq/compound` offers 70000 TPM but is an agentic model that runs its own web
+    searches. Not used: it would inject data the sourcing guard never saw.
+  - `llm.is_permanent()` stops retries on 404/401. Four attempts on a wrong model
+    name cost half a minute per call and proved nothing.
 * **ollama** - runs locally, no key and no limit, but only as fast as the machine.
   Measured on this laptop (i5-1334U, no discrete GPU, Intel Iris Xe): **6.2 tokens/sec**
   with qwen3:8b, so roughly 8-10 minutes per company against about 1 minute on Groq.

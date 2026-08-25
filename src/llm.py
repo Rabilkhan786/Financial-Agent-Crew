@@ -79,6 +79,19 @@ def text_of(reply):
     return "".join(parts).strip()
 
 
+# Errors that will never come right by trying again: a wrong model name, a bad
+# key. Retrying these just burns time - four attempts on a 404 cost half a
+# minute per call and told us nothing we did not know on the first try.
+PERMANENT = ("model_not_found", "does not exist", "invalid_api_key",
+             "Invalid API Key", "authentication", "404", "401")
+
+
+def is_permanent(error):
+    """True if trying again cannot possibly help."""
+    text = str(error)
+    return any(marker in text for marker in PERMANENT)
+
+
 def wait_for(error, attempt):
     """How long to wait before trying again.
 
@@ -108,6 +121,9 @@ def ask(prompt, attempts=4):
             return text_of(get_llm().invoke(prompt))
         except Exception as error:
             last = error
+            if is_permanent(error):
+                log.error("model call failed and will not be retried: %s", str(error)[:160])
+                return ""
             if attempt < attempts - 1:
                 pause = wait_for(error, attempt)
                 log.warning("model call failed (%s), waiting %.1fs and trying again",
