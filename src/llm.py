@@ -18,10 +18,12 @@ from src import config
 
 log = config.get_logger(__name__)
 
-_model = None
+_base = None
+
+RETRY = {"stop_after_attempt": 5, "wait_exponential_jitter": True}
 
 
-def get_llm():
+def get_base():
     """The model, made once and reused.
 
     The free tier allows a few thousand tokens a minute. Waiting for a 429 and
@@ -29,8 +31,8 @@ def get_llm():
     to it. Pacing the calls up front, and keeping the retry as a backstop, is
     the more reliable order.
     """
-    global _model
-    if _model is None:
+    global _base
+    if _base is None:
         if not config.GROQ_API_KEY:
             raise RuntimeError("GROQ_API_KEY is not set in .env")
         pace = InMemoryRateLimiter(
@@ -38,15 +40,20 @@ def get_llm():
             check_every_n_seconds=0.5,
             max_bucket_size=2,
         )
-        _model = ChatGroq(
+        _base = ChatGroq(
             model=config.GROQ_MODEL,
             api_key=config.GROQ_API_KEY,
             temperature=config.LLM_TEMPERATURE,
             rate_limiter=pace,
-        ).with_retry(stop_after_attempt=5, wait_exponential_jitter=True)
+        )
         log.info("using %s, paced at %s calls/second",
                  config.GROQ_MODEL, config.CALLS_PER_SECOND)
-    return _model
+    return _base
+
+
+def get_llm():
+    """The model with retries, for plain text answers."""
+    return get_base().with_retry(**RETRY)
 
 
 def ask(prompt):
@@ -65,7 +72,11 @@ def ask_structured(prompt, schema):
     the reply itself, so there is no JSON handling to write or to get wrong.
     """
     try:
-        return get_llm().with_structured_output(schema).invoke(prompt)
+        # The retry wrapper has to go on the outside here. Calling
+        # .with_structured_output() on an already-retrying model raises, because
+        # the wrapper does not carry that method - which silently turned every
+        # structured answer into None until it was caught.
+        return get_base().with_structured_output(schema).with_retry(**RETRY).invoke(prompt)
     except Exception as error:
         log.error("structured call failed: %s", str(error)[:200])
         return None

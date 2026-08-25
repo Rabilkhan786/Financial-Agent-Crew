@@ -22,11 +22,17 @@ from src.tools import sourcing
 log = config.get_logger(__name__)
 
 # Ten US companies, picked so the checks are not all run against easy cases.
-# Five are healthy, five are meant to set off the red-flag rules: Boeing has
-# negative equity, Ford and AT&T carry heavy debt, Intel burns cash, and
-# Walgreens has falling revenue. A run where nothing is flagged proves nothing.
+# Five are healthy; five are meant to set off the red-flag rules. Boeing is
+# heavily borrowed with thin interest cover, Ford and AT&T carry heavy debt,
+# Intel burns cash, and Lumen manages negative equity, high leverage, thin
+# cover and falling revenue at once. A run where nothing is flagged proves
+# nothing.
+#
+# Walgreens (WBA) used to be here and was dropped: it was taken private, so
+# Yahoo returns no data at all and its "failure" was an empty report rather
+# than anything the checks were meant to find.
 TICKERS = ["AAPL", "MSFT", "JNJ", "KO", "PG",
-           "F", "T", "INTC", "BA", "WBA"]
+           "F", "T", "INTC", "BA", "LUMN"]
 
 REQUIRED_SECTIONS = [
     "Executive summary", "Business quality", "Growth", "Profitability",

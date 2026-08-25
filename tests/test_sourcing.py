@@ -176,3 +176,24 @@ def test_sourcing_imports_nothing_but_the_standard_library():
             imported.add(node.module.split(".")[0])
 
     assert imported <= {"math", "re"}, imported
+
+
+# --- The model wrapper ------------------------------------------------------
+
+def test_structured_output_survives_the_retry_wrapper():
+    """Regression: wrapping the model in .with_retry() first removed
+    .with_structured_output(), so every reviewer decision silently became None.
+
+    Checked without calling the model - it is the wiring that broke, not the
+    answer.
+    """
+    from src import config, llm
+
+    if not config.GROQ_API_KEY:
+        import pytest
+        pytest.skip("no key configured")
+
+    assert hasattr(llm.get_base(), "with_structured_output")
+    from src.agents.orchestrator import ReviewDecision
+    chain = llm.get_base().with_structured_output(ReviewDecision).with_retry(**llm.RETRY)
+    assert hasattr(chain, "invoke")
