@@ -125,28 +125,17 @@ Explain each file to the user in 2-4 sentences of plain English as it is created
 
 ## Model provider
 
-`LLM_PROVIDER` in `.env` is `gemini` (default), `groq` or `ollama`. Only `llm.py`
-reads it.
+Groq only, through LangChain. `GROQ_MODEL` in `.env`, default `openai/gpt-oss-120b`.
+Gemini and Ollama support was removed once Groq settled: dead code that had to be
+kept working for no benefit.
 
-* **gemini** - free tier is 20 requests/day per model, too small for a ten-company eval.
-* **groq** - the default, `openai/gpt-oss-120b`. Two things learned the hard way:
-  - **Which models a key can reach varies by account.** A second key had 13 models
-    and no llama at all, so `llama-3.3-70b-versatile` 404ed everywhere. Always list
-    the models for the key in hand rather than trusting a name that worked before.
-  - Free tier limits **tokens per minute** (8000 here). A ten-company eval brushes
-    it; `llm.ask()` reads the "try again in Xs" out of the 429 and waits exactly that.
-  - `groq/compound` offers 70000 TPM but is an agentic model that runs its own web
-    searches. Not used: it would inject data the sourcing guard never saw.
-  - `llm.is_permanent()` stops retries on 404/401. Four attempts on a wrong model
-    name cost half a minute per call and proved nothing.
-* **ollama** - runs locally, no key and no limit, but only as fast as the machine.
-  Measured on this laptop (i5-1334U, no discrete GPU, Intel Iris Xe): **6.2 tokens/sec**
-  with qwen3:8b, so roughly 8-10 minutes per company against about 1 minute on Groq.
-  Useful offline; too slow for the eval.
-  `reasoning=False` is required, or qwen3 leaks "/think" and `<think>` blocks into the report.
-
-`text_of()` already handles every shape (Gemini returns a list of blocks, Groq and
-Ollama return strings).
+* **Which models a key can reach varies by account.** A second key had 13 models and
+  no llama, so `llama-3.3-70b-versatile` 404ed everywhere. List the models for the key
+  in hand rather than trusting a name that worked before.
+* Free tier limits **tokens per minute** (8000). `llm.get_llm()` uses LangChain
+  `.with_retry(stop_after_attempt=5, wait_exponential_jitter=True)` for that.
+* `groq/compound` has 70000 TPM but runs its own web searches. Not used: it would
+  feed the writer numbers the sourcing guard never saw.
 
 ## Known limit
 

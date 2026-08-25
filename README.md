@@ -61,15 +61,13 @@ uv run --no-project python -m evals.run_eval
 
 ## Keys
 
-Only one is required, and which one depends on `LLM_PROVIDER`.
+Only one is required.
 
 | Key | Needed? | What it gives you |
 |---|---|---|
-| `GROQ_API_KEY` | **yes, by default** | Groq. Free, and fast enough to run the whole eval |
-| `GOOGLE_API_KEY` | only if `LLM_PROVIDER=gemini` | Gemini. Free tier is 20 requests/day per model |
-| — | — | Nothing at all if `LLM_PROVIDER=ollama`: the model runs on your machine |
+| `GROQ_API_KEY` | **yes** | The model every agent uses. Free |
 | — | — | Yahoo Finance needs no key: prices, statements, news |
-| `FINNHUB_API_KEY` | no | Better news than Yahoo headlines (US listings only on the free plan) |
+| `FINNHUB_API_KEY` | no | Better news than Yahoo headlines (US listings on the free plan) |
 | `ALPHAVANTAGE_API_KEY` | no | A sentiment score per article |
 | `LANGSMITH_API_KEY` | no | Traces every run at smith.langchain.com |
 | `REDDIT_CLIENT_ID` / `_SECRET` | no | Reddit posts instead of StockTwits |
@@ -79,19 +77,20 @@ shows which sources are live.
 
 ### Choosing a model
 
-`LLM_PROVIDER` takes `groq` (default), `gemini` or `ollama`. Only `src/llm.py`
-reads it, so switching changes nothing else in the project.
+`GROQ_MODEL` in `.env`. The default is `openai/gpt-oss-120b`.
 
-| Provider | Per company | Ten-company eval | Key |
-|---|---|---|---|
-| **groq** (`openai/gpt-oss-120b`) | ~1 min | ~10 min | free |
-| gemini | ~1 min | cannot finish in a day (20 req/day) | free |
-| ollama | ~8-10 min | ~90 min | none, runs locally |
+**Which models a key can reach varies by account.** A replacement key had 13
+models and no llama at all, so a name that had worked the day before returned
+404 on every call. List the models for the key in hand rather than trusting a
+name:
 
-Ollama timings were measured on an i5-1334U laptop with no discrete GPU running
-`qwen3:8b` at 6.2 tokens/sec. It needs `reasoning=False`, or qwen3 leaks
-`/think` markers into the report. Worth having because it needs no key at all;
-too slow to run the eval with.
+```bash
+curl -H "Authorization: Bearer $GROQ_API_KEY" -H "User-Agent: crew"      https://api.groq.com/openai/v1/models
+```
+
+`groq/compound` looks tempting at 70,000 tokens/minute against 8,000, but it is
+an agentic model that runs its own web searches. It is not used here: it would
+put numbers in front of the writer that the sourcing guard never saw.
 
 ---
 

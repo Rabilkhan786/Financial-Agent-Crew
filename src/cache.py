@@ -13,8 +13,6 @@ folder is local, disposable and gitignored: deleting it only costs a re-fetch.
 import hashlib
 import pickle
 import time
-from pathlib import Path
-from typing import Any, Callable
 
 from src import config
 

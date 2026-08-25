@@ -4,7 +4,7 @@
 `os.getenv`, so there is a single file to look at when asking "what does this
 need to run?" or "why is that feature switched off?".
 
-Only GOOGLE_API_KEY is required. Every other key is optional and switches on an
+Only GROQ_API_KEY is required. Every other key is optional and switches on an
 extra capability; the app runs without all of them.
 """
 
@@ -23,23 +23,10 @@ def _get(name, default=""):
     return os.getenv(name, default).strip().strip('"').strip("'")
 
 
-# --- Which model to use -----------------------------------------------------
-# "gemini" or "groq". Groq is worth switching to when the Gemini free tier runs
-# out: its free allowance is much larger, so a ten-company eval finishes in one
-# sitting. Only llm.py reads this, so nothing else changes.
-LLM_PROVIDER = _get("LLM_PROVIDER", "gemini").lower()
-LLM_TEMPERATURE = float(_get("LLM_TEMPERATURE", "0.2") or 0.2)
-
-GOOGLE_API_KEY = _get("GOOGLE_API_KEY")
-GEMINI_MODEL = _get("GEMINI_MODEL", "gemini-3.5-flash")
-
+# --- The model --------------------------------------------------------------
 GROQ_API_KEY = _get("GROQ_API_KEY")
 GROQ_MODEL = _get("GROQ_MODEL", "openai/gpt-oss-120b")
-
-# Ollama runs a model on this machine. No key and no limit, but it is only as
-# fast as the hardware, and a laptop without a discrete GPU is slow.
-OLLAMA_MODEL = _get("OLLAMA_MODEL", "qwen3:8b")
-OLLAMA_BASE_URL = _get("OLLAMA_BASE_URL", "http://localhost:11434")
+LLM_TEMPERATURE = float(_get("LLM_TEMPERATURE", "0.2") or 0.2)
 
 # --- Optional: tracing ------------------------------------------------------
 LANGSMITH_TRACING = _get("LANGSMITH_TRACING", "false").lower() in {"1", "true", "yes"}
@@ -55,9 +42,7 @@ ALPHAVANTAGE_API_KEY = _get("ALPHAVANTAGE_API_KEY")
 
 # What is switched on. Read these rather than testing the keys by hand, so the
 # rule for "is this available?" lives in one place.
-HAS_GEMINI = bool(GOOGLE_API_KEY)
 HAS_GROQ = bool(GROQ_API_KEY)
-HAS_OLLAMA = LLM_PROVIDER == "ollama"
 HAS_LANGSMITH = bool(LANGSMITH_TRACING and LANGSMITH_API_KEY)
 HAS_REDDIT = bool(REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET)
 HAS_FINNHUB = bool(FINNHUB_API_KEY)
@@ -97,20 +82,14 @@ def missing_required():
 
     Only the key for the provider actually in use is required.
     """
-    if LLM_PROVIDER == "ollama":
-        return []                      # runs locally, no key to be missing
-    if LLM_PROVIDER == "groq":
-        return [] if GROQ_API_KEY else ["GROQ_API_KEY"]
-    return [] if GOOGLE_API_KEY else ["GOOGLE_API_KEY"]
+    return [] if GROQ_API_KEY else ["GROQ_API_KEY"]
 
 
 def enabled_sources():
     """What each optional key switches on — shown in the app so the user can
     see at a glance why a section of the report is thin."""
     return {
-        f"Gemini ({GEMINI_MODEL})": HAS_GEMINI and LLM_PROVIDER != "groq",
-        f"Groq ({GROQ_MODEL})": HAS_GROQ and LLM_PROVIDER == "groq",
-        f"Ollama, local ({OLLAMA_MODEL})": HAS_OLLAMA,
+        f"Groq ({GROQ_MODEL})": HAS_GROQ,
         "Yahoo Finance (no key needed)": True,
         "LangSmith tracing": HAS_LANGSMITH,
         "Reddit posts": HAS_REDDIT,
