@@ -137,6 +137,19 @@ kept working for no benefit.
 * `groq/compound` has 70000 TPM but runs its own web searches. Not used: it would
   feed the writer numbers the sourcing guard never saw.
 
+## Groq limits, learned by hitting them
+
+* **Tokens per minute** (8000 on the free tier). `llm.py` paces calls with
+  LangChain `InMemoryRateLimiter` at `config.CALLS_PER_SECOND`, with `.with_retry()`
+  as the backstop. Retrying alone was not enough - a ten-company eval still lost
+  reports to it.
+* **Tokens per day** (200000). Ten companies is roughly 50 model calls, and the
+  report writer prompt is large, so two or three full evals exhaust a day. When
+  this is hit, short prompts still answer and long ones do not, so reports come
+  back as short stubs with sections missing. That is the signature to look for.
+* **Do not run the eval and the live tests at the same time.** They share one
+  token budget and both fail.
+
 ## Known limit
 
 Gemini free tier allows **20 requests per day per model**. One crew run uses about
