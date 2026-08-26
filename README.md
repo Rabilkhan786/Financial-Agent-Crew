@@ -208,48 +208,75 @@ flagged proves nothing:
    calculated value. This is the check that proves the model is not doing maths.
 3. **All sections present.**
 
-### Results (10 companies, Groq `openai/gpt-oss-120b`)
+### Results
+
+Measured 2026-08-26 on Groq `openai/gpt-oss-120b`, run in two batches of five
+because of the daily token allowance.
 
 | Check | Result |
 |---|---|
 | No blanks (NaN) | **10 / 10** |
-| All sections present | **10 / 10** |
 | No unsourced numbers | **10 / 10** |
+| All sections present | **8 / 10** |
 
-That 10/10 is the result of the guard doing its job, not of the model behaving.
-On the same run the reviewer rejected 4 reports for unsourced numbers and the
-researcher caught itself 7 times, each one going back for a rewrite. Before the
-guard existed the failures reached the reader: a `1,199` price target, a
-`$20 billion` capital raise, and a sourced "34% jump in profit" widened into an
-invented "34-45%" range. None of those figures appeared in any fetched article.
+| Ticker | Blanks | Numbers | Sections | Revisions |
+|---|---|---|---|---|
+| AAPL | pass | pass | pass | 0 |
+| MSFT | pass | pass | pass | 0 |
+| JNJ | pass | pass | pass | 0 |
+| KO | pass | pass | pass | 0 |
+| PG | pass | pass | pass | 0 |
+| F | pass | pass | pass | 0 |
+| T | pass | pass | pass | **1** |
+| INTC | pass | pass | pass | 0 |
+| BA | pass | pass | **fail** | 0 |
+| LUMN | pass | pass | **fail** | 0 |
+
+**The two failures were not report quality.** The free tier allows 200,000
+tokens a day. The daily quota ran out at 14:33 and those two companies were
+written at 14:28 and 14:32, so the writer got no answer and the report was
+printed with its calculated sections only. The same tickers pass on a fresh
+quota. It is a limit of the free plan, not of the crew, and it is left in the
+table rather than quietly re-run until it looked better.
+
+AT&T needed **one revision**: the reviewer rejected the first draft and sent the
+work back, which is the loop doing what it exists for on real data.
+
+### Why the guards matter
+
+The unsourced-number check earns its place. Before it existed these reached the
+reader: a `1,199` price target, a `$20 billion` capital raise, and a sourced
+"34% jump in profit" widened into an invented "34-45%" range. None of those
+figures appeared in any article the crew fetched.
 
 Prompting alone did not stop it. The prompts now name the failure explicitly and
-still the guard fires - which is the argument for having both.
+the guard still fires, which is the argument for having both.
 
-Getting there meant fixing five false positives in the checker first: dates in
-both ISO and prose form, thousands separators splitting `3,807.45` into two
-numbers, index names like `S&P 500`, the Alpha Vantage sentiment score, and the
-StockTwits tally (which is counted in Python, so `16 out of 30 posts` is a
-calculated figure). Reports also use narrow no-break spaces, which stopped the
-index names matching until the text was normalised. A noisy check hides the
-real findings.
+Getting a trustworthy number out of the check meant fixing five false positives
+first: dates in both ISO and prose form, thousands separators splitting
+`3,807.45` into two numbers, index names like `S&P 500`, the Alpha Vantage
+sentiment score, and the StockTwits tally (counted in Python, so
+`16 out of 30 posts` is a calculated figure). Reports also use narrow no-break
+spaces, which stopped the index names matching until the text was normalised. A
+noisy check hides the real findings.
 
-### Known limit: free-tier rate limits
+### Known limit: the free tier
 
-A full run needs five to seven model calls per company.
+Two separate limits, and the second is the one that bites.
 
-**Gemini** allows 20 requests per day per model, so a ten-company eval cannot
-finish in a day. That is why the default provider is Groq.
+**Tokens per minute** (8,000). `llm.py` paces calls with LangChain's
+`InMemoryRateLimiter` and keeps `.with_retry()` behind it.
 
-**Groq** limits tokens per minute, and the limit differs by model: 8,000 for
-`openai/gpt-oss-120b` but **12,000 for `llama-3.3-70b-versatile`**, which is why
-the smaller model is the default. Checked by reading the rate-limit headers
-rather than assuming the biggest model is the best one to run a batch on.
+**Tokens per day** (200,000). One company costs roughly 15,000-20,000 tokens, so
+about ten to twelve companies fit in a day. A ten-company eval fits once; running
+it repeatedly does not. When the daily quota goes, the writer gets no answer and
+the report comes back with only its calculated sections - which looks exactly
+like a code fault and is not one. `GROQ_MODEL` can be pointed at another model,
+each of which has its own daily budget.
 
-`llm.ask()` retries, and waits for as long as the provider asks. The 429 body
-says "try again in 8.7s"; a fixed five-second guess wasted the attempt and left
-four of ten reports as stubs. Reading the stated delay and moving to the
-higher-limit model, all four passed on the retry.
+Also worth knowing: a reasoning model can spend its whole output budget thinking
+and return an empty answer, which is why `MAX_OUTPUT_TOKENS` and
+`REQUEST_TIMEOUT` are set explicitly rather than left at their defaults.
 
 ---
 
