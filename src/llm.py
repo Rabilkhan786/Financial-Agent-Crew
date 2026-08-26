@@ -49,6 +49,12 @@ def get_base():
             # the answer. It came out as an eight thousand character "report"
             # that was mostly thinking, with the real headings buried inside.
             reasoning_format="hidden",
+            # A reasoning model thinks before it writes, and the report prompt
+            # is the longest one here. The default timeout cut those calls off
+            # mid-answer, which reached the reader as "the model did not
+            # respond" and a report with no sections.
+            timeout=config.REQUEST_TIMEOUT,
+            max_tokens=config.MAX_OUTPUT_TOKENS,
         )
         log.info("using %s, paced at %s calls/second",
                  config.GROQ_MODEL, config.CALLS_PER_SECOND)

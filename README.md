@@ -69,7 +69,6 @@ Only one is required.
 | — | — | Yahoo Finance needs no key: prices, statements, news |
 | `FINNHUB_API_KEY` | no | Better news than Yahoo headlines (US listings on the free plan) |
 | `ALPHAVANTAGE_API_KEY` | no | A sentiment score per article |
-| `LANGSMITH_API_KEY` | no | Traces every run at smith.langchain.com |
 | `REDDIT_CLIENT_ID` / `_SECRET` | no | Reddit posts instead of StockTwits |
 
 Missing optional keys switch features off; they never stop a run. The sidebar

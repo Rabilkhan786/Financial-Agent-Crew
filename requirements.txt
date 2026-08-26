@@ -2,7 +2,6 @@
 langgraph
 langchain-core
 langchain-groq
-langsmith
 
 # Data + maths (all arithmetic happens here, never in the LLM)
 pandas

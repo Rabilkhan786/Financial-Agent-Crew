@@ -33,10 +33,16 @@ LLM_TEMPERATURE = float(_get("LLM_TEMPERATURE", "0.2") or 0.2)
 # retry in llm.py is only the backstop.
 CALLS_PER_SECOND = float(_get("CALLS_PER_SECOND", "0.12") or 0.12)
 
-# --- Optional: tracing ------------------------------------------------------
-LANGSMITH_TRACING = _get("LANGSMITH_TRACING", "false").lower() in {"1", "true", "yes"}
-LANGSMITH_API_KEY = _get("LANGSMITH_API_KEY")
-LANGSMITH_PROJECT = _get("LANGSMITH_PROJECT", "financial-analysis-crew")
+# How long to let one model call run. A reasoning model thinks before it
+# writes, and the report prompt is the longest one here, so the default was
+# too short and those calls were cut off mid-answer.
+REQUEST_TIMEOUT = float(_get("REQUEST_TIMEOUT", "180") or 180)
+
+# How much the model may write in one answer. A reasoning model spends part of
+# this budget thinking before it writes anything, and the default was small
+# enough that the whole budget went on thought: the reply came back empty and
+# the report was printed with no sections at all. Big enough for both now.
+MAX_OUTPUT_TOKENS = int(_get("MAX_OUTPUT_TOKENS", "4096") or 4096)
 
 # --- Optional: extra data sources -------------------------------------------
 REDDIT_CLIENT_ID = _get("REDDIT_CLIENT_ID")
@@ -48,7 +54,6 @@ ALPHAVANTAGE_API_KEY = _get("ALPHAVANTAGE_API_KEY")
 # What is switched on. Read these rather than testing the keys by hand, so the
 # rule for "is this available?" lives in one place.
 HAS_GROQ = bool(GROQ_API_KEY)
-HAS_LANGSMITH = bool(LANGSMITH_TRACING and LANGSMITH_API_KEY)
 HAS_REDDIT = bool(REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET)
 HAS_FINNHUB = bool(FINNHUB_API_KEY)
 HAS_ALPHAVANTAGE = bool(ALPHAVANTAGE_API_KEY)
@@ -96,7 +101,6 @@ def enabled_sources():
     return {
         f"Groq ({GROQ_MODEL})": HAS_GROQ,
         "Yahoo Finance (no key needed)": True,
-        "LangSmith tracing": HAS_LANGSMITH,
         "Reddit posts": HAS_REDDIT,
         "StockTwits posts (no key needed)": not HAS_REDDIT,
         "Finnhub news": HAS_FINNHUB,

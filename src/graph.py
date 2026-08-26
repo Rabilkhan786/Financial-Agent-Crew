@@ -60,10 +60,6 @@ def stream_crew(ticker, start_date, end_date):
     crew = build_graph()
     starting_point = state.new_state(ticker, start_date, end_date)
 
-    if config.HAS_LANGSMITH:
-        log.info("LangSmith tracing is on, project %s", config.LANGSMITH_PROJECT)
-    else:
-        log.info("LangSmith tracing is off")
 
     # recursion_limit is the backstop: even if the revise loop misbehaves,
     # LangGraph stops after this many steps.

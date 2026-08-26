@@ -50,9 +50,10 @@ force-accepts. `graph.invoke` is called with `recursion_limit=25`.
 5. Missing statement data is reported as unavailable, never inferred by the LLM.
 6. `src/cache.py` from the start — disk cache keyed by ticker+date for yfinance, news, Reddit.
 7. fpdf2: sanitise every string to latin-1, and call `set_x(l_margin)` before each `multi_cell`.
-8. LangSmith: read `LANGSMITH_TRACING`, `LANGSMITH_API_KEY`, `LANGSMITH_PROJECT` from `.env`.
-   Pass `config={"run_name": f"crew-{ticker}", "tags": [ticker], "recursion_limit": 25}`
-   to `graph.invoke`. A missing LangSmith key must never break a run.
+8. `graph.invoke` is called with
+   `config={"run_name": f"crew-{ticker}", "tags": [ticker], "recursion_limit": 25}`.
+   LangSmith tracing was removed (user decision, 2026-08-26): the key was revoked,
+   every run logged 403s, and nothing in the project read the traces.
 9. Do not add agents, data sources, RAG, or price prediction beyond what is listed here.
 
 ## Structure
@@ -166,7 +167,8 @@ run the log is the only way to see who asked for what, in which order.
 ## Keys
 
 `.env` holds real keys and is gitignored. `.env.example` is committed and must never
-contain a real key. Required: `GOOGLE_API_KEY`. Optional: LangSmith and Reddit keys.
+contain a real key. Required: `GROQ_API_KEY`. Optional: Finnhub, Alpha Vantage
+and Reddit keys.
 
 ## Portfolio scope (user decision, 2026-08-15)
 
@@ -190,7 +192,7 @@ Following *Generative AI with LangChain* (Auffarth & Kuligin):
   so the app and the eval share one implementation. The app shows each agent as
   it finishes.
 * Versions are kept current: langgraph 1.2.11, langchain-core 1.6.0,
-  langchain-google-genai 4.3.5, langsmith 0.11.1, streamlit 1.62.0.
+  streamlit 1.62.0.
 
 Kept hand-written on purpose: the retry in `llm.ask`. It reads the "try again in
 Xs" out of a 429 and waits exactly that. A generic exponential backoff was tried
