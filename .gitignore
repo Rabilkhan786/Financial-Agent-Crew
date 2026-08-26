@@ -16,9 +16,11 @@ output/*
 # Disk cache for yfinance / news / Reddit responses
 .cache/
 
-.claude/*
-
+# Claude Code
+.claude/
 CLAUDE.md
+claude.md
 
+# Build instructions
 build.md
 BUILD.md
