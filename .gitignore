@@ -13,7 +13,7 @@ __pycache__/
 output/*
 !output/.gitkeep
 
-# Disk cache for yfinance / news / Reddit responses
+# Disk cache for yfinance / news / social responses
 .cache/
 
 # Claude Code

@@ -1,10 +1,15 @@
 """Wires the agents together into a LangGraph workflow.
 
-START -> orchestrator -> market_researcher -> fundamentals_analyst
+START -> orchestrator -> (ticker invalid? -> END)
+                       -> market_researcher -> fundamentals_analyst
       -> data_analyst -> report_writer -> orchestrator_review
       -> back to one of the two analysts, or END.
 
-The loop back is why this is a graph and not a plain list of function calls.
+Two conditional edges, both plain functions in orchestrator.py: one right
+after intake, so a ticker Yahoo cannot confirm never reaches the agents that
+would otherwise fetch news, statements and prices for nothing; one after the
+review, which can send the work back. The loop back is why this is a graph
+and not a plain list of function calls.
 """
 
 from langgraph.graph import END, START, StateGraph
@@ -28,7 +33,14 @@ def build_graph():
     graph.add_node("orchestrator_review", orchestrator.review)
 
     graph.add_edge(START, "orchestrator")
-    graph.add_edge("orchestrator", "market_researcher")
+
+    # A ticker Yahoo cannot confirm goes straight to END: no news lookup, no
+    # statement fetch, no price fetch for a company that does not exist.
+    graph.add_conditional_edges(
+        "orchestrator",
+        orchestrator.route_after_intake,
+        {"continue": "market_researcher", "invalid_ticker": END},
+    )
     graph.add_edge("market_researcher", "fundamentals_analyst")
     graph.add_edge("fundamentals_analyst", "data_analyst")
     graph.add_edge("data_analyst", "report_writer")

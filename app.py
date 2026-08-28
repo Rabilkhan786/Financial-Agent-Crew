@@ -11,6 +11,8 @@ import streamlit as st
 
 from src import config, formatting, graph, report_pdf
 
+log = config.get_logger(__name__)
+
 st.set_page_config(page_title="Financial Analysis Agent Crew", layout="wide",
                    initial_sidebar_state="expanded")
 
@@ -40,23 +42,59 @@ with st.sidebar:
 
 
 def metrics_table(values, currency=None):
-    """A two column table of metric name and value."""
+    """Metric name, value, and the evidence behind it - period, source,
+    formula - so a reader can check a figure without re-running the crew."""
     rows = []
     for name, value in values.items():
+        evidence = formatting.evidence_for(name)
         rows.append({"Measure": formatting.label(name),
-                     "Value": formatting.metric(name, value, currency)})
+                     "Value": formatting.metric(name, value, currency),
+                     "Period": evidence["period"],
+                     "Source": evidence["source"],
+                     "Formula": evidence["formula"]})
     return pd.DataFrame(rows)
+
+
+DATA_SOURCE_LABEL = {
+    "live": "🟢 live - fetched during this run",
+    "cached": "🔵 cached - reused from an earlier fetch",
+    "unavailable": "⚪ unavailable - nothing came back",
+}
+
+
+def data_source_caption(source):
+    """One line saying whether a section's figures were fetched just now,
+    reused from the disk cache, or never arrived - never left to guesswork."""
+    st.caption(DATA_SOURCE_LABEL.get(source, DATA_SOURCE_LABEL["unavailable"]))
 
 
 if run_it and not config.missing_required():
     # Show each agent as it finishes instead of a blank spinner. The snapshots
     # come from LangGraph's stream, so nothing here tracks progress by hand.
+    #
+    # snapshot is set to None before the loop rather than left to the for-loop
+    # to define it: if the stream ever yields zero snapshots (an unexpected
+    # provider or graph failure), referencing an undefined snapshot afterwards
+    # would crash with a second, more confusing error on top of the first.
     with st.status(f"Running the crew on {ticker}", expanded=True) as running:
         shown = 0
-        for snapshot in graph.stream_crew(ticker, str(start_date), str(end_date)):
-            for entry in snapshot.get("conversation_log", [])[shown:]:
-                st.write(f"**{entry['agent']}** - {entry['message']}")
-                shown += 1
+        snapshot = None
+        try:
+            for snapshot in graph.stream_crew(ticker, str(start_date), str(end_date)):
+                for entry in snapshot.get("conversation_log", [])[shown:]:
+                    st.write(f"**{entry['agent']}** - {entry['message']}")
+                    shown += 1
+        except Exception as error:
+            log.error("crew run failed for %s: %s", ticker, error)
+            running.update(label=f"Failed to analyse {ticker}", state="error", expanded=True)
+            st.error(f"Something went wrong while analysing {ticker}: {error}")
+            st.stop()
+
+        if snapshot is None:
+            running.update(label=f"Failed to analyse {ticker}", state="error", expanded=True)
+            st.error(f"No result was produced for {ticker}. Check output/run.log and try again.")
+            st.stop()
+
         st.session_state["result"] = snapshot
         running.update(label=f"Finished {ticker}", state="complete", expanded=False)
 
@@ -93,6 +131,7 @@ with report_tab:
 
 
 with fundamentals_tab:
+    data_source_caption(fundamentals.get("data_source", "unavailable"))
     if not fundamentals.get("available"):
         st.warning(fundamentals.get("note", "No statement data available."))
     else:
@@ -129,6 +168,7 @@ with fundamentals_tab:
 
 
 with price_tab:
+    data_source_caption(analysis.get("data_source", "unavailable"))
     if not analysis.get("available"):
         st.warning(analysis.get("note", "No price data available."))
     else:
@@ -145,9 +185,13 @@ with price_tab:
             st.image(charts["price"])
 
         st.subheader("News")
+        data_source_caption(research.get("news_data_source", "unavailable"))
         for article in research.get("articles", []):
             st.write(f"[{article.get('published')}] {article.get('title')}")
-        st.write(f"**Retail chatter** {research.get('social_sentiment')}")
+
+        st.subheader("Retail chatter")
+        data_source_caption(research.get("social_data_source", "unavailable"))
+        st.write(research.get("social_sentiment"))
 
 
 with data_tab:
@@ -165,8 +209,38 @@ with data_tab:
 
 
 with log_tab:
-    st.caption("What each agent did, in order.")
-    for number, entry in enumerate(result.get("conversation_log", []), start=1):
-        st.write(f"**{number}. {entry.get('agent')}** - {entry.get('message')}")
-    st.write(f"Revisions used: {result.get('revision_count', 0)} "
-             f"of {result.get('max_revisions', config.MAX_REVISIONS)}")
+    st.caption("What each agent did, in order. Not the model's private reasoning - "
+               "just what it was asked and what it decided.")
+    log_entries = result.get("conversation_log", [])
+
+    for number, entry in enumerate(log_entries, start=1):
+        agent = entry.get("agent")
+        message = entry.get("message", "")
+        if agent == "orchestrator_review":
+            # orchestrator_review appears once at the very end when the report
+            # is accepted, or in the middle - followed by the agent it sent
+            # work back to - when it is not. That position, not the wording of
+            # the message, is what tells the two apart reliably.
+            accepted = entry is log_entries[-1]
+            icon = "✅" if accepted else "\U0001f501"   # check mark, repeat
+            heading = "Reviewer - accepted" if accepted else "Reviewer - sending work back"
+            st.write(f"{icon} **{number}. {heading}** - {message}")
+        else:
+            st.write(f"**{number}. {agent}** - {message}")
+
+    st.divider()
+    if not result.get("report"):
+        # No report was ever attempted - an unconfirmed ticker stops the crew
+        # before report_writer runs, so there is nothing for the reviewer to
+        # have accepted or sent back. Saying "accepted" here would be wrong.
+        st.info("The crew stopped before writing a report - see the errors above.")
+    else:
+        revisions = result.get("revision_count", 0)
+        cap = result.get("max_revisions", config.MAX_REVISIONS)
+        if revisions == 0:
+            st.success("Accepted on the first draft - no revisions needed.")
+        elif revisions >= cap:
+            st.warning(f"Accepted after {revisions} of {cap} revisions - the cap was reached, "
+                       "so the report stands even if the reviewer would have asked for more.")
+        else:
+            st.success(f"Accepted after {revisions} of {cap} possible revisions.")

@@ -9,6 +9,13 @@ from src import config, formatting, llm, state
 
 log = config.get_logger(__name__)
 
+# What goes in the report when the model does not answer at all - usually the
+# free tier's daily or per-minute token limit. Named here so evals/run_eval.py
+# can recognise this exact failure and not confuse it with a genuine quality
+# problem in the report.
+STUB_REPORT_MARKER = ("The report could not be written because the language "
+                      "model did not respond.")
+
 # Always printed, word for word. Not something an agent decides to include.
 DISCLAIMER = (
     "This report is informational analysis produced automatically from public "
@@ -166,9 +173,8 @@ def run(crew_state):
     ))
 
     if not body:
-        body = ("## Executive summary\n\nThe report could not be written because the "
-                "language model did not respond. The calculated figures below are "
-                "still correct and can be read directly.")
+        body = (f"## Executive summary\n\n{STUB_REPORT_MARKER} The calculated "
+                "figures below are still correct and can be read directly.")
 
     # The red flags and the disclaimer are added here as fixed text rather than
     # left to the model, so they can never be dropped or reworded.

@@ -41,6 +41,22 @@ def age_hours(namespace, key):
     return (time.time() - path.stat().st_mtime) / 3600
 
 
+# A file this fresh was almost certainly just written by this very call to
+# cached(), a moment ago, rather than sitting on disk from an earlier run.
+JUST_FETCHED_SECONDS = 5
+
+
+def freshness(namespace, key):
+    """Whether the value at this key was just fetched, loaded from an older
+    cache file, or never stored at all. For the UI to say "live" or "cached"
+    honestly, checked after calling cached() with the same namespace and key.
+    """
+    age = age_hours(namespace, key)
+    if age is None:
+        return "unavailable"
+    return "live" if age * 3600 < JUST_FETCHED_SECONDS else "cached"
+
+
 def load(namespace, key, max_age_hours=DEFAULT_MAX_AGE_HOURS):
     """Read a cached value. Returns (hit, value); (False, None) when there is no
     fresh copy. A corrupt file is treated as a miss rather than an error."""

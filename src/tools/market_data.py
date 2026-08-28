@@ -19,6 +19,14 @@ log = config.get_logger(__name__)
 CACHE_MAX_AGE_HOURS = config.CACHE_HOURS_PRICES
 VALUATION_LOOKBACK_DAYS = 40      # nearest trading day to a fiscal year end
 
+# yfinance's history() takes a timeout directly; a stalled connection times out
+# rather than hanging the agent that called it. Its other calls (.info, the
+# statements, .news) go through an internal session with no exposed timeout -
+# checked, and a custom requests.Session breaks yfinance's own cookie/crumb
+# handling and gets rate-limited immediately, which is worse than the hang it
+# was meant to fix. Those stay as they are.
+REQUEST_TIMEOUT = 20
+
 
 def _naive(prices):
     """Strip the timezone from a price index.
@@ -35,7 +43,8 @@ def _naive(prices):
 
 def _fetch_closes(symbol, start, end):
     """Adjusted closing prices for one symbol over a date range."""
-    history = yf.Ticker(symbol).history(start=start, end=end, auto_adjust=True)
+    history = yf.Ticker(symbol).history(start=start, end=end, auto_adjust=True,
+                                        timeout=REQUEST_TIMEOUT)
     if history is None or history.empty or "Close" not in history:
         return pd.Series(dtype=float)
     return _naive(history["Close"].astype(float))
@@ -63,12 +72,15 @@ def _fetch_info(symbol):
 
 def fetch_profile(symbol, use_cache=True):
     """Company name, sector, currency, and today's headline multiples."""
+    source = "unavailable"
     try:
         if use_cache:
             info = cache.cached("profile", symbol, lambda: _fetch_info(symbol),
                                 max_age_hours=CACHE_MAX_AGE_HOURS)
+            source = cache.freshness("profile", symbol)
         else:
             info = _fetch_info(symbol)
+            source = "live"
     except Exception:
         info = {}
 
@@ -80,6 +92,7 @@ def fetch_profile(symbol, use_cache=True):
         "market_cap": info.get("marketCap"),
         "trailing_pe": info.get("trailingPE"),
         "price_to_book": info.get("priceToBook"),
+        "data_source": source if info else "unavailable",
         "shares_outstanding": info.get("sharesOutstanding"),
         "business_summary": (info.get("longBusinessSummary") or "")[:1200] or None,
     }
@@ -162,6 +175,13 @@ def fetch_market_data(ticker, start=None, end=None, statements=None, use_cache=T
         error = (f"No price data for {ticker} between {start} and {end}. "
                  "Check the ticker symbol and the date range.")
 
+    if prices.empty:
+        price_source = "unavailable"
+    elif use_cache:
+        price_source = cache.freshness("prices", f"{ticker}:{start}:{end}")
+    else:
+        price_source = "live"
+
     return {
         "prices": prices,
         "benchmark_symbol": benchmark_symbol,
@@ -171,5 +191,6 @@ def fetch_market_data(ticker, start=None, end=None, statements=None, use_cache=T
         "pb_current": profile.get("price_to_book"),
         "pe_history": valuation["pe_history"],
         "pb_history": valuation["pb_history"],
+        "data_source": price_source,
         "error": error,
     }

@@ -19,6 +19,7 @@ class CrewState(TypedDict, total=False):
     company: str
     start_date: str
     end_date: str
+    ticker_valid: bool      # set by orchestrator.run(); gates whether the crew continues
 
     # What each agent produced
     research: dict          # market_researcher: news, social posts, market context
@@ -46,6 +47,7 @@ def new_state(ticker, start_date, end_date):
         company="",
         start_date=start_date,
         end_date=end_date,
+        ticker_valid=True,      # optimistic; orchestrator.run() sets this False if it fails
         research={},
         fundamentals={},
         analysis={},

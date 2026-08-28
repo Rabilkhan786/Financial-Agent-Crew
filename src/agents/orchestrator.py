@@ -66,6 +66,7 @@ def run(crew_state):
                    "exchanges do, such as .L for London.")
         log.warning("orchestrator: %s", message)
         return {"company": company,
+                "ticker_valid": False,
                 "conversation_log": [state.note("orchestrator", message)],
                 "errors": [message]}
 
@@ -74,7 +75,20 @@ def run(crew_state):
             "then the fundamentals analyst, then the data analyst.")
     log.info("orchestrator: %s", plan)
     return {"company": company,
+            "ticker_valid": True,
             "conversation_log": [state.note("orchestrator", plan)]}
+
+
+def route_after_intake(crew_state):
+    """Whether the crew should continue past the orchestrator.
+
+    A ticker Yahoo cannot confirm gets no further: no news lookup, no
+    statement fetch, no price fetch. Those calls cost real time and real
+    provider requests on a ticker that was never going to produce a report.
+    """
+    if crew_state.get("ticker_valid", True):
+        return "continue"
+    return "invalid_ticker"
 
 
 def flags_not_mentioned(crew_state):

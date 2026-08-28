@@ -45,16 +45,12 @@ REQUEST_TIMEOUT = float(_get("REQUEST_TIMEOUT", "180") or 180)
 MAX_OUTPUT_TOKENS = int(_get("MAX_OUTPUT_TOKENS", "4096") or 4096)
 
 # --- Optional: extra data sources -------------------------------------------
-REDDIT_CLIENT_ID = _get("REDDIT_CLIENT_ID")
-REDDIT_CLIENT_SECRET = _get("REDDIT_CLIENT_SECRET")
-REDDIT_USER_AGENT = _get("REDDIT_USER_AGENT", "financial-analysis-crew/0.1")
 FINNHUB_API_KEY = _get("FINNHUB_API_KEY")
 ALPHAVANTAGE_API_KEY = _get("ALPHAVANTAGE_API_KEY")
 
 # What is switched on. Read these rather than testing the keys by hand, so the
 # rule for "is this available?" lives in one place.
 HAS_GROQ = bool(GROQ_API_KEY)
-HAS_REDDIT = bool(REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET)
 HAS_FINNHUB = bool(FINNHUB_API_KEY)
 HAS_ALPHAVANTAGE = bool(ALPHAVANTAGE_API_KEY)
 
@@ -101,8 +97,7 @@ def enabled_sources():
     return {
         f"Groq ({GROQ_MODEL})": HAS_GROQ,
         "Yahoo Finance (no key needed)": True,
-        "Reddit posts": HAS_REDDIT,
-        "StockTwits posts (no key needed)": not HAS_REDDIT,
+        "StockTwits posts (no key needed)": True,
         "Finnhub news": HAS_FINNHUB,
         "Alpha Vantage news sentiment": HAS_ALPHAVANTAGE,
     }

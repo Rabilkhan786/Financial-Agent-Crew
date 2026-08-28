@@ -71,7 +71,8 @@ def run(crew_state):
         message = fetched["error"] or f"No statement data available for {ticker}."
         log.warning("fundamentals_analyst: %s", message)
         return {
-            "fundamentals": {"available": False, "note": message},
+            "fundamentals": {"available": False, "note": message,
+                             "data_source": fetched.get("data_source", "unavailable")},
             "conversation_log": [state.note("fundamentals_analyst", message)],
             "errors": [message],
         }
@@ -124,6 +125,7 @@ def run(crew_state):
             "years": fetched["years"],
             "period_end": fetched["period_end"],
             "data_note": statements.describe_gaps(fetched),
+            "data_source": fetched.get("data_source", "unavailable"),
             "interpretation": interpretation,
         },
         "company": crew_state.get("company") or profile.get("name") or ticker,

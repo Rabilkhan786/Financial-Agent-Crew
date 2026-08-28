@@ -88,6 +88,16 @@ def test_the_cap_comes_from_the_state_not_a_constant():
     assert orchestrator.review(state)["revision_target"] == ""
 
 
+def test_a_second_revision_is_granted_before_the_cap():
+    # One revision already used (count=1), cap=2: one more is still allowed.
+    # This is the count going 1 -> 2, distinct from the cap-reached case above
+    # where it is already at the cap and must not move at all.
+    state = crew(report="## Executive summary\nAll fine.", flags=[flag()], count=1, cap=2)
+    result = orchestrator.review(state)
+    assert result["revision_target"] == "fundamentals_analyst"
+    assert result["revision_count"] == 2
+
+
 # --- Red flags the report failed to mention ---------------------------------
 
 def test_a_dropped_red_flag_is_sent_back():
@@ -223,3 +233,19 @@ def test_a_string_false_is_not_a_conflict(monkeypatch):
     monkeypatch.setattr(orchestrator.llm, "ask_structured", lambda *a, **k:
                         orchestrator.ReviewDecision(conflict="false", target="", reason=""))
     assert orchestrator.review(crew(report="## S\nSteady."))["revision_target"] == ""
+
+
+# --- Routing after intake: does an invalid ticker stop the crew? ------------
+
+def test_route_after_intake_continues_for_a_confirmed_ticker():
+    assert orchestrator.route_after_intake({"ticker_valid": True}) == "continue"
+
+
+def test_route_after_intake_defaults_to_continue_when_unset():
+    # new_state() always sets this, but the routing function itself should not
+    # assume that and quietly stop a run just because the key is missing.
+    assert orchestrator.route_after_intake({}) == "continue"
+
+
+def test_route_after_intake_stops_for_an_unconfirmed_ticker():
+    assert orchestrator.route_after_intake({"ticker_valid": False}) == "invalid_ticker"

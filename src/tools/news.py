@@ -193,11 +193,13 @@ def fetch_news(ticker, limit=DEFAULT_LIMIT, days=DEFAULT_DAYS, use_cache=True):
     try:
         if use_cache:
             result = cache.cached("news", key, produce, max_age_hours=CACHE_MAX_AGE_HOURS)
+            result["data_source"] = cache.freshness("news", key)
         else:
             result = produce()
+            result["data_source"] = "live"
     except Exception as error:
-        result = {"articles": [], "source": "unavailable", "sentiment": None,
-                  "error": f"news lookup failed: {error}"}
+        result = {"articles": [], "source": "unavailable", "data_source": "unavailable",
+                  "sentiment": None, "error": f"news lookup failed: {error}"}
 
     articles = result.get("articles") or []
     result["article_count"] = len(articles)

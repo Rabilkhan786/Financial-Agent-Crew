@@ -59,7 +59,7 @@ def run(crew_state):
     company = crew_state.get("company") or profile.get("name") or ticker
 
     headlines = news.fetch_news(ticker)
-    chatter = social.fetch_social_posts(ticker, company)
+    chatter = social.fetch_social_posts(ticker)
 
     sentiment = headlines.get("sentiment") or {}
     if sentiment.get("average_score") is not None:
@@ -111,8 +111,10 @@ def run(crew_state):
         "research": {
             "articles": headlines["articles"],
             "news_source": headlines["source"],
+            "news_data_source": headlines.get("data_source", "unavailable"),
             "news_sentiment": sentiment or None,
             "social": chatter,
+            "social_data_source": chatter.get("data_source", "unavailable"),
             "social_sentiment": chatter["social_sentiment"],
             "profile": profile,
             "summary": summary_text,

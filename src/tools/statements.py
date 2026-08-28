@@ -107,18 +107,20 @@ def fetch_statements(ticker, years=DEFAULT_YEARS, use_cache=True):
         if use_cache:
             raw = cache.cached("statements", key, lambda: _fetch_raw(ticker),
                                max_age_hours=CACHE_MAX_AGE_HOURS)
+            source = cache.freshness("statements", key)
         else:
             raw = _fetch_raw(ticker)
+            source = "live"
     except Exception as error:
         return {"data": pd.DataFrame(), "missing": sorted(FIELD_MAP), "currency": None,
-                "years": 0, "period_end": None,
+                "years": 0, "period_end": None, "data_source": "unavailable",
                 "error": f"could not fetch statements for {ticker}: {error}"}
 
     frames = [raw.get("income"), raw.get("balance"), raw.get("cashflow")]
     frames = [frame for frame in frames if isinstance(frame, pd.DataFrame) and not frame.empty]
     if not frames:
         return {"data": pd.DataFrame(), "missing": sorted(FIELD_MAP), "currency": None,
-                "years": 0, "period_end": None,
+                "years": 0, "period_end": None, "data_source": source,
                 "error": f"Yahoo Finance returned no statement data for {ticker}"}
 
     columns: dict[str, pd.Series] = {}
@@ -134,7 +136,7 @@ def fetch_statements(ticker, years=DEFAULT_YEARS, use_cache=True):
 
     if not columns:
         return {"data": pd.DataFrame(), "missing": sorted(FIELD_MAP), "currency": None,
-                "years": 0, "period_end": None,
+                "years": 0, "period_end": None, "data_source": source,
                 "error": f"no recognisable line items for {ticker}"}
 
     # Yahoo returns newest-first with one column per period; the maths layer
@@ -146,8 +148,8 @@ def fetch_statements(ticker, years=DEFAULT_YEARS, use_cache=True):
     if missing:
         log.warning("%s: no data for %s - reported as unavailable, not estimated",
                     ticker, ", ".join(missing))
-    log.info("%s: %d years of statements, %d of %d fields present",
-             ticker, len(data), len(columns), len(FIELD_MAP))
+    log.info("%s: %d years of statements, %d of %d fields present (%s)",
+             ticker, len(data), len(columns), len(FIELD_MAP), source)
 
     info = raw.get("info") or {}
     return {
@@ -156,6 +158,7 @@ def fetch_statements(ticker, years=DEFAULT_YEARS, use_cache=True):
         "currency": info.get("currency"),
         "years": len(data),
         "period_end": data.index[-1].date().isoformat() if len(data) else None,
+        "data_source": source,
         "error": None,
     }
 

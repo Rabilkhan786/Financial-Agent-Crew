@@ -47,7 +47,8 @@ def run(crew_state):
         message = market["error"] or f"No price data for {ticker}."
         log.warning("data_analyst: %s", message)
         return {
-            "analysis": {"available": False, "note": message},
+            "analysis": {"available": False, "note": message,
+                        "data_source": market.get("data_source", "unavailable")},
             "conversation_log": [state.note("data_analyst", message)],
             "errors": [message],
         }
@@ -86,6 +87,7 @@ def run(crew_state):
             "unavailable": computed["unavailable"],
             "price_series": computed["series"],
             "charts": drawn,
+            "data_source": market.get("data_source", "unavailable"),
             "interpretation": interpretation,
         },
         "conversation_log": [state.note("data_analyst", summary)],

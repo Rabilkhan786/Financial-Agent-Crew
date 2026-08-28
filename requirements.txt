@@ -2,6 +2,7 @@
 langgraph
 langchain-core
 langchain-groq
+pydantic          # orchestrator.py imports this directly for ReviewDecision
 
 # Data + maths (all arithmetic happens here, never in the LLM)
 pandas
@@ -12,9 +13,6 @@ yfinance
 matplotlib
 fpdf2
 streamlit
-
-# Optional social signal
-praw
 
 # Config + tests
 python-dotenv

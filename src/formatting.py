@@ -39,6 +39,59 @@ def label(name):
     return LABELS.get(name, name.replace("_", " ").capitalize())
 
 
+# What period, source and formula back each metric — for the app's evidence
+# table. Written by hand against the actual functions in ratios.py and
+# kpi.py, not generated, so it can go stale if a formula changes there
+# without this being updated too.
+_STATEMENTS = "Yahoo Finance statements"
+_PRICES = "Yahoo Finance closing prices"
+_LATEST_YEAR = "latest fiscal year"
+_FULL_PERIOD = "full period selected"
+
+EVIDENCE = {
+    "revenue_growth_yoy": {"period": _LATEST_YEAR, "source": _STATEMENTS,
+                           "formula": "(revenue - prior year revenue) / prior year revenue"},
+    "revenue_cagr": {"period": "latest 3 fiscal years", "source": _STATEMENTS,
+                     "formula": "(latest revenue / revenue 3 years ago) ** (1/3) - 1"},
+    "operating_margin": {"period": _LATEST_YEAR, "source": _STATEMENTS,
+                         "formula": "operating income / revenue"},
+    "net_margin": {"period": _LATEST_YEAR, "source": _STATEMENTS,
+                  "formula": "net income / revenue"},
+    "cash_conversion": {"period": _LATEST_YEAR, "source": _STATEMENTS,
+                        "formula": "operating cash flow / net income"},
+    "free_cash_flow": {"period": _LATEST_YEAR, "source": _STATEMENTS,
+                       "formula": "operating cash flow - |capital expenditure|"},
+    "debt_to_equity": {"period": _LATEST_YEAR, "source": _STATEMENTS,
+                       "formula": "total debt / total equity"},
+    "interest_coverage": {"period": _LATEST_YEAR, "source": _STATEMENTS,
+                          "formula": "EBIT / |interest expense|"},
+    "return_on_capital_employed": {"period": _LATEST_YEAR, "source": _STATEMENTS,
+                                   "formula": "EBIT / (total assets - current liabilities)"},
+    "return_on_equity": {"period": _LATEST_YEAR, "source": _STATEMENTS,
+                         "formula": "net income / total equity"},
+    "total_return": {"period": _FULL_PERIOD, "source": _PRICES,
+                     "formula": "last close / first close - 1"},
+    "annualised_return": {"period": _FULL_PERIOD, "source": _PRICES,
+                          "formula": "total return, restated as a per-year rate"},
+    "volatility": {"period": _FULL_PERIOD, "source": _PRICES,
+                  "formula": "std. dev. of daily returns, annualised"},
+    "max_drawdown": {"period": _FULL_PERIOD, "source": _PRICES,
+                     "formula": "worst peak-to-trough fall"},
+    "sharpe_ratio": {"period": _FULL_PERIOD, "source": _PRICES,
+                     "formula": "(annualised return - risk-free rate) / volatility"},
+    "ma_50": {"period": "last 50 trading days", "source": _PRICES,
+             "formula": "rolling 50-day average close"},
+    "ma_200": {"period": "last 200 trading days", "source": _PRICES,
+              "formula": "rolling 200-day average close"},
+    "last_close": {"period": "most recent trading day", "source": _PRICES, "formula": "-"},
+}
+
+
+def evidence_for(name):
+    """Period, source and formula for one metric, for the app's evidence table."""
+    return EVIDENCE.get(name, {"period": "-", "source": "Yahoo Finance", "formula": "-"})
+
+
 def money(value, currency=None):
     """Large amounts shortened to billions or millions."""
     if value is None:
