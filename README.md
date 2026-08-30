@@ -88,18 +88,42 @@ generated from the endpoint signatures:
 | `GET /charts/{filename}` | The PNGs the data analyst drew |
 | `GET /report/{ticker}/pdf` | The finished report as a PDF |
 
-With Docker:
+With Docker — both halves, one command:
+
+```bash
+docker compose up --build
+```
+
+That starts two containers from one image: the API on `http://localhost:8000`
+and the app on `http://localhost:8501`. The app waits for the API's `/health`
+to answer before it starts, so the first page load never shows "could not
+reach the API".
+
+One image because both halves share the same code and dependencies. Two
+*containers* because a container should run one process — if the API falls
+over, Docker restarts the API rather than taking the UI down with it, and the
+two have separate logs.
+
+Inside the compose network the app reaches the API as `http://api:8000`, set
+in `docker-compose.yml` as an `environment` entry so it overrides the
+host-side `API_URL` in `.env`. Charts, PDFs and the disk cache live in named
+volumes, so a restart does not lose a report or re-fetch everything from
+Yahoo. Keys are read from `.env` at run time and never baked into the image
+(`.dockerignore` excludes it).
+
+To run just one half:
 
 ```bash
 docker build -t crew .
-docker run --env-file .env -p 8501:8501 crew
+docker run --env-file .env -p 8000:8000 crew          # the API (default CMD)
 ```
 
-The image was verified at an earlier, single-process stage: it built at 983MB,
-served the app, read keys from `--env-file` and ran the test suite inside the
-container, with keys never baked in. **It has not been rebuilt since the split
-into two processes**, and its `CMD` starts only Streamlit, so it needs an update
-(a process manager, or two images) before it will work as-is.
+**Verification status:** `docker compose config` validates and resolves
+correctly (checked — including that `API_URL` really does become
+`http://api:8000` for the app container). The image itself was built and run
+successfully at an earlier, single-process stage. The two-container setup has
+**not been built end to end** in this environment, so treat `compose up` as
+reviewed-but-unrun rather than proven.
 
 Tests and the eval:
 
@@ -457,6 +481,7 @@ pydantic (structured reviewer output)
 ## Layout
 
 ```
+docker-compose.yml         both halves: one image, two containers
 api.py                     the FastAPI service - the only thing that runs the crew
 app.py                     the Streamlit front end - a pure HTTP client of the API
 src/api_client.py          every HTTP call the app makes, in one place
