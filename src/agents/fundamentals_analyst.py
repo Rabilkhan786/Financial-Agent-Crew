@@ -6,6 +6,8 @@ because a model doing arithmetic cannot be checked and a wrong figure in a
 financial report is worse than no figure at all.
 """
 
+import datetime as dt
+
 from src import config, formatting, llm, state
 from src.tools import market_data, ratios, statements
 
@@ -78,8 +80,18 @@ def run(crew_state):
         }
 
     profile = market_data.fetch_profile(ticker)
-    prices = market_data.fetch_prices(ticker)
-    valuation_input = market_data.valuation_history(prices, fetched["data"])
+
+    # The valuation history pairs each past fiscal year end with the closing
+    # price nearest to it, so the prices have to reach back at least as far as
+    # the oldest statement. Calling fetch_prices with no dates does not: with
+    # both start and end unset, yfinance falls back to one month of history,
+    # which cannot reach a year end one to five years back. Every period was
+    # then skipped, pe_history and pb_history came back empty, and the P/E and
+    # P/B comparison printed "not enough history to compare" for every company.
+    statement_data = fetched["data"]
+    history_start = (statement_data.index[0] - dt.timedelta(days=60)).date().isoformat()
+    prices = market_data.fetch_prices(ticker, history_start, None)
+    valuation_input = market_data.valuation_history(prices, statement_data)
 
     computed = ratios.compute_all(
         fetched["data"],
