@@ -44,6 +44,12 @@ REQUEST_TIMEOUT = float(_get("REQUEST_TIMEOUT", "180") or 180)
 # the report was printed with no sections at all. Big enough for both now.
 MAX_OUTPUT_TOKENS = int(_get("MAX_OUTPUT_TOKENS", "4096") or 4096)
 
+# --- Where the Streamlit app finds the API ----------------------------------
+# The app makes no model calls and no data fetches of its own; it asks the
+# FastAPI service for everything. Pointing this at a deployed API is the only
+# change needed to run the two halves on different machines.
+API_URL = _get("API_URL", "http://localhost:8000")
+
 # --- Optional: extra data sources -------------------------------------------
 FINNHUB_API_KEY = _get("FINNHUB_API_KEY")
 ALPHAVANTAGE_API_KEY = _get("ALPHAVANTAGE_API_KEY")

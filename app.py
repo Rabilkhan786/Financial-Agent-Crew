@@ -1,7 +1,14 @@
 """The Streamlit app: type a ticker, get a report.
 
-Five tabs so the reader can go from the written report down to the raw numbers
-that produced it.
+This is the front end and nothing else. It runs no agents, calls no model and
+fetches no market data - it asks the FastAPI service (api.py) for all of that
+over HTTP. The only project modules it imports are the API client, the config
+that tells it where the API is, and the shared formatting helpers.
+
+Run the API first, then this:
+
+    uvicorn api:app --port 8000
+    streamlit run app.py
 """
 
 import datetime as dt
@@ -9,19 +16,19 @@ import datetime as dt
 import pandas as pd
 import streamlit as st
 
-from src import config, formatting, graph, report_pdf
+from src import api_client, config, formatting, serialise
 
 log = config.get_logger(__name__)
 
-st.set_page_config(page_title="Financial Analysis Agent Crew", layout="wide",
+st.set_page_config(page_title="Financial Research Agent", layout="wide",
                    initial_sidebar_state="expanded")
 
-st.title("Financial Analysis Agent Crew")
+st.title("Financial Research Agent")
 st.caption("Five agents research a company and write a fundamental analysis report. "
            "Informational only - not investment advice.")
 
 
-# --- Sidebar: what to analyse, and what is switched on ----------------------
+# --- Sidebar: what to analyse, and what the API says is switched on ---------
 with st.sidebar:
     st.header("Company")
     ticker = st.text_input("Ticker", value="AAPL",
@@ -33,12 +40,26 @@ with st.sidebar:
     run_it = st.button("Run the crew", type="primary", use_container_width=True)
 
     st.divider()
-    st.subheader("Data sources")
-    for name, switched_on in config.enabled_sources().items():
-        st.write(("ON - " if switched_on else "off - ") + name)
+    st.subheader("Backend")
+    st.caption(f"API: {config.API_URL}")
 
-    if config.missing_required():
-        st.error("Missing in .env: " + ", ".join(config.missing_required()))
+    # Asked of the API rather than read from local config: the app is not the
+    # thing holding the keys any more, so it cannot answer this itself.
+    try:
+        service = api_client.health()
+        if service.get("missing_config"):
+            st.error("The API is up but not configured: "
+                     + ", ".join(service["missing_config"]))
+        else:
+            st.success(f"Connected - {service.get('model')}")
+        st.subheader("Data sources")
+        for name, switched_on in (service.get("sources") or {}).items():
+            st.write(("ON - " if switched_on else "off - ") + name)
+        api_reachable = True
+    except api_client.ApiError as error:
+        st.error(str(error))
+        st.caption("Start it with:  uvicorn api:app --port 8000")
+        api_reachable = False
 
 
 def metrics_table(values, currency=None):
@@ -68,34 +89,40 @@ def data_source_caption(source):
     st.caption(DATA_SOURCE_LABEL.get(source, DATA_SOURCE_LABEL["unavailable"]))
 
 
-if run_it and not config.missing_required():
-    # Show each agent as it finishes instead of a blank spinner. The snapshots
-    # come from LangGraph's stream, so nothing here tracks progress by hand.
-    #
-    # snapshot is set to None before the loop rather than left to the for-loop
-    # to define it: if the stream ever yields zero snapshots (an unexpected
-    # provider or graph failure), referencing an undefined snapshot afterwards
-    # would crash with a second, more confusing error on top of the first.
+def series_frame(series_by_name, wanted):
+    """The API sends each series as records; rebuild the ones we display."""
+    columns = {}
+    for name in wanted:
+        records = series_by_name.get(name)
+        if records:
+            columns[name] = serialise.records_to_series(records)
+    return pd.DataFrame(columns) if columns else None
+
+
+if run_it and api_reachable:
+    # The API streams one line per agent as it finishes, so this shows the crew
+    # working rather than a blank spinner. result stays None until the final
+    # line arrives: a stream that ends early must not look like a success.
     with st.status(f"Running the crew on {ticker}", expanded=True) as running:
-        shown = 0
-        snapshot = None
+        result = None
         try:
-            for snapshot in graph.stream_crew(ticker, str(start_date), str(end_date)):
-                for entry in snapshot.get("conversation_log", [])[shown:]:
-                    st.write(f"**{entry['agent']}** - {entry['message']}")
-                    shown += 1
-        except Exception as error:
-            log.error("crew run failed for %s: %s", ticker, error)
+            for event in api_client.stream_analysis(ticker, str(start_date), str(end_date)):
+                if event.get("event") == "progress":
+                    st.write(f"**{event.get('agent')}** - {event.get('message')}")
+                elif event.get("event") == "result":
+                    result = event.get("result")
+        except api_client.ApiError as error:
+            log.error("run failed for %s: %s", ticker, error)
             running.update(label=f"Failed to analyse {ticker}", state="error", expanded=True)
-            st.error(f"Something went wrong while analysing {ticker}: {error}")
+            st.error(str(error))
             st.stop()
 
-        if snapshot is None:
+        if result is None:
             running.update(label=f"Failed to analyse {ticker}", state="error", expanded=True)
-            st.error(f"No result was produced for {ticker}. Check output/run.log and try again.")
+            st.error(f"No result was produced for {ticker}. Check the API log and try again.")
             st.stop()
 
-        st.session_state["result"] = snapshot
+        st.session_state["result"] = result
         running.update(label=f"Finished {ticker}", state="complete", expanded=False)
 
 result = st.session_state.get("result")
@@ -104,12 +131,12 @@ if not result:
     st.info("Enter a ticker on the left and press Run the crew.")
     st.stop()
 
-fundamentals = result.get("fundamentals", {})
-analysis = result.get("analysis", {})
-research = result.get("research", {})
-charts = analysis.get("charts", {})
+fundamentals = result.get("fundamentals") or {}
+analysis = result.get("analysis") or {}
+research = result.get("research") or {}
+charts = analysis.get("charts") or {}
 
-for problem in result.get("errors", []):
+for problem in result.get("errors") or []:
     st.warning(problem)
 
 report_tab, fundamentals_tab, price_tab, data_tab, log_tab = st.tabs(
@@ -119,15 +146,13 @@ report_tab, fundamentals_tab, price_tab, data_tab, log_tab = st.tabs(
 with report_tab:
     st.markdown(result.get("report") or "No report was produced.")
 
-    if result.get("report"):
+    if result.get("pdf_url"):
         try:
-            pdf_path = report_pdf.build_pdf(result)
-            with open(pdf_path, "rb") as handle:
-                st.download_button("Download the PDF", handle.read(),
-                                   file_name=f"{ticker}_report.pdf",
-                                   mime="application/pdf")
-        except Exception as error:
-            st.error(f"Could not build the PDF: {error}")
+            st.download_button("Download the PDF", api_client.fetch_pdf(result["pdf_url"]),
+                               file_name=f"{ticker}_report.pdf",
+                               mime="application/pdf")
+        except api_client.ApiError as error:
+            st.error(str(error))
 
 
 with fundamentals_tab:
@@ -136,13 +161,13 @@ with fundamentals_tab:
         st.warning(fundamentals.get("note", "No statement data available."))
     else:
         st.subheader("The numbers")
-        st.dataframe(metrics_table(fundamentals.get("metrics", {}),
+        st.dataframe(metrics_table(fundamentals.get("metrics") or {},
                                    fundamentals.get("currency")),
                      hide_index=True, use_container_width=True)
 
         st.subheader("Valuation against its own history")
         for name in ("pe", "pb"):
-            result_for = fundamentals.get("valuation", {}).get(name)
+            result_for = (fundamentals.get("valuation") or {}).get(name)
             title = "P/E" if name == "pe" else "P/B"
             if result_for:
                 st.write(f"**{title}** {result_for['current']:.1f} today "
@@ -151,7 +176,7 @@ with fundamentals_tab:
                 st.write(f"**{title}** not enough history to compare")
 
         st.subheader("Red flags")
-        flags = fundamentals.get("red_flags", [])
+        flags = fundamentals.get("red_flags") or []
         if not flags:
             st.success("No automated check was triggered.")
         for flag in flags:
@@ -162,7 +187,7 @@ with fundamentals_tab:
 
         for name in ("revenue_profit", "margins", "cash_vs_profit", "debt"):
             if charts.get(name):
-                st.image(charts[name])
+                st.image(api_client.chart_url(charts[name]))
 
         st.caption(fundamentals.get("data_note", ""))
 
@@ -172,7 +197,7 @@ with price_tab:
     if not analysis.get("available"):
         st.warning(analysis.get("note", "No price data available."))
     else:
-        st.dataframe(metrics_table(analysis.get("kpis", {})),
+        st.dataframe(metrics_table(analysis.get("kpis") or {}),
                      hide_index=True, use_container_width=True)
         st.write(f"**Trend** {analysis.get('trend')}")
         against_index = analysis.get("benchmark")
@@ -182,11 +207,11 @@ with price_tab:
         st.caption(f"Sharpe uses a risk-free rate of "
                    f"{analysis.get('risk_free_rate', 0):.1%}.")
         if charts.get("price"):
-            st.image(charts["price"])
+            st.image(api_client.chart_url(charts["price"]))
 
         st.subheader("News")
         data_source_caption(research.get("news_data_source", "unavailable"))
-        for article in research.get("articles", []):
+        for article in research.get("articles") or []:
             st.write(f"[{article.get('published')}] {article.get('title')}")
 
         st.subheader("Retail chatter")
@@ -197,21 +222,24 @@ with price_tab:
 with data_tab:
     st.caption("Everything the report is built on. Every figure here was "
                "calculated in Python, not by the language model.")
-    if fundamentals.get("series"):
+
+    statements = series_frame(fundamentals.get("series") or {},
+                              ("revenue", "operating_income", "net_income",
+                               "operating_cash_flow", "total_debt", "total_equity"))
+    if statements is not None:
         st.subheader("Financial statements")
-        st.dataframe(pd.DataFrame(
-            {name: values for name, values in fundamentals["series"].items()
-             if name in ("revenue", "operating_income", "net_income",
-                         "operating_cash_flow", "total_debt", "total_equity")}))
-    if analysis.get("price_series", {}).get("close") is not None:
+        st.dataframe(statements)
+
+    prices = (analysis.get("price_series") or {}).get("close")
+    if prices:
         st.subheader("Prices")
-        st.line_chart(analysis["price_series"]["close"])
+        st.line_chart(serialise.records_to_series(prices))
 
 
 with log_tab:
     st.caption("What each agent did, in order. Not the model's private reasoning - "
                "just what it was asked and what it decided.")
-    log_entries = result.get("conversation_log", [])
+    log_entries = result.get("conversation_log") or []
 
     for number, entry in enumerate(log_entries, start=1):
         agent = entry.get("agent")
@@ -221,7 +249,7 @@ with log_tab:
             # is accepted, or in the middle - followed by the agent it sent
             # work back to - when it is not. That position, not the wording of
             # the message, is what tells the two apart reliably.
-            accepted = entry is log_entries[-1]
+            accepted = number == len(log_entries)
             icon = "✅" if accepted else "\U0001f501"   # check mark, repeat
             heading = "Reviewer - accepted" if accepted else "Reviewer - sending work back"
             st.write(f"{icon} **{number}. {heading}** - {message}")

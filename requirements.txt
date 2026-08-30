@@ -9,6 +9,11 @@ pandas
 numpy
 yfinance
 
+# The API (runs the crew) and the Streamlit app that calls it over HTTP
+fastapi
+uvicorn
+requests
+
 # Output
 matplotlib
 fpdf2

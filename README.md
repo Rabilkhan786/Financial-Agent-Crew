@@ -1,10 +1,24 @@
-# Financial Analysis Agent Crew
+# Financial Research Agent
 
 Type a stock ticker into a Streamlit app. Five agents research the company and
 produce a fundamental analysis report, shown in the app and downloadable as a PDF.
 
 **This is informational analysis, not investment advice.** Every report carries
 that disclaimer as fixed text.
+
+The project runs as two processes: a **FastAPI service** that owns the agent
+crew, and a **Streamlit app** that is a pure HTTP client of it.
+
+```
+Streamlit (app.py)  ──HTTP──>  FastAPI (api.py)  ──>  LangGraph crew
+   the front end                 the only thing          agents, Groq,
+   no model, no data             that runs anything      Yahoo, pandas
+```
+
+`app.py` imports no agent, no model and no data tool — only `api_client.py`,
+`config.py` and the shared formatting helpers. That boundary is what lets the
+API be restarted, moved to another machine or called by something other than
+Streamlit without touching the front end.
 
 ---
 
@@ -50,8 +64,29 @@ You need Python 3.11+ and [uv](https://docs.astral.sh/uv/).
 ```bash
 uv pip install -r requirements.txt
 cp .env.example .env        # then put your Groq key in it
-uv run --no-project streamlit run app.py
 ```
+
+Two processes, in two terminals. The API first — the app is useless without it:
+
+```bash
+uv run --no-project uvicorn api:app --port 8000    # terminal 1: the crew
+uv run --no-project streamlit run app.py           # terminal 2: the front end
+```
+
+The app shows the API's status in its sidebar and says how to start it if it
+cannot connect, so a forgotten terminal 1 gives a plain message rather than a
+traceback.
+
+The API is useful on its own — interactive docs at `http://localhost:8000/docs`,
+generated from the endpoint signatures:
+
+| Endpoint | What it does |
+|---|---|
+| `GET /health` | Is it up, which model, which sources are configured |
+| `POST /analyse` | Run the crew, get the whole result as JSON |
+| `POST /analyse/stream` | The same run as newline-delimited JSON, one line per agent |
+| `GET /charts/{filename}` | The PNGs the data analyst drew |
+| `GET /report/{ticker}/pdf` | The finished report as a PDF |
 
 With Docker:
 
@@ -60,9 +95,11 @@ docker build -t crew .
 docker run --env-file .env -p 8501:8501 crew
 ```
 
-Verified: the image builds at 983MB, serves the app on 8501, reads the keys from
-`--env-file`, reaches Yahoo Finance, and runs the full test suite inside the
-container. Keys are never baked into the image.
+The image was verified at an earlier, single-process stage: it built at 983MB,
+served the app, read keys from `--env-file` and ran the test suite inside the
+container, with keys never baked in. **It has not been rebuilt since the split
+into two processes**, and its `CMD` starts only Streamlit, so it needs an update
+(a process manager, or two images) before it will work as-is.
 
 Tests and the eval:
 
@@ -73,7 +110,7 @@ uv run --no-project python -m evals.run_eval             # all 10 companies
 uv run --no-project python -m evals.run_eval AAPL MSFT   # or just a subset
 ```
 
-The fast suite is 141 tests and runs in a few seconds with no network and no
+The fast suite is 182 tests and runs in a few seconds with no network and no
 `GROQ_API_KEY`. `conftest.py` skips anything marked `@pytest.mark.live` unless
 `--live` is passed, so a fresh clone can run the whole fast suite immediately.
 
@@ -129,6 +166,33 @@ and arithmetic done in code can be re-checked with a calculator. `ratios.py`
 and `kpi.py` between them have 83 dedicated tests, and every one of those 83
 asserts a value worked out by hand first, not just checked against the code's
 own output.
+
+### The front end holds nothing
+
+`app.py` talks to `api.py` over HTTP and imports no agent, no model client and
+no data tool. Everything that needs a key, a network call or a pandas object
+lives behind the API.
+
+The reason is not tidiness. A Streamlit script re-runs top to bottom on every
+widget interaction, so an in-process crew is re-entered by the UI framework
+itself; behind an API, a run is one request and a click is just a click. It
+also means the API key lives in one process rather than in the one serving a
+web page, the crew can be called by something that is not Streamlit (the eval
+already does, directly), and either half can be restarted or deployed without
+the other.
+
+Two things have to cross that boundary, and both are handled in
+`src/serialise.py` rather than left to chance: a pandas Series becomes a list
+of `{period, value}` records with ISO date strings (not epoch milliseconds
+needing a client-side guess at the unit), and NaN becomes `null` — Python
+writes bare `NaN` into JSON by default, which parses in Python and fails in a
+browser. A test asserts the whole converted state survives
+`json.dumps(..., allow_nan=False)`.
+
+Progress is streamed as newline-delimited JSON: one line per agent as it
+finishes, then a final line with the result. The app shows the crew working
+rather than a blank two-minute spinner, which is what the in-process version
+did before the split, so the change cost no UX.
 
 ### Red flags are rules, not opinions
 
@@ -393,7 +457,10 @@ pydantic (structured reviewer output)
 ## Layout
 
 ```
-app.py                     the Streamlit app
+api.py                     the FastAPI service - the only thing that runs the crew
+app.py                     the Streamlit front end - a pure HTTP client of the API
+src/api_client.py          every HTTP call the app makes, in one place
+src/serialise.py           crew state -> JSON (pandas and NaN do not cross HTTP)
 src/config.py              the only file that reads .env, plus logging
 src/state.py               the shared TypedDict every agent reads and writes
 src/llm.py                 the only file that talks to Groq
@@ -410,7 +477,7 @@ src/tools/statements.py    Yahoo line items to our column names
 src/tools/market_data.py   prices, benchmark, profile, valuation history
 src/tools/news.py          Yahoo / Finnhub / Alpha Vantage
 src/tools/social.py        StockTwits (keyless)
-tests/                     141 fast tests + 20 live tests (see Testing, below)
+tests/                     182 fast tests + 20 live tests (see Testing, below)
 evals/run_eval.py          ten companies, three checks, four-way classification
 output/                    reports, charts, logs (gitignored)
 ```
