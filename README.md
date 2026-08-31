@@ -91,6 +91,8 @@ generated from the endpoint signatures:
 With Docker — both halves, one command:
 
 ```bash
+# Builds the image (first run only; cached after) and starts both containers.
+# Leave this running - it stays attached and streams both containers' logs.
 docker compose up --build
 ```
 
@@ -104,9 +106,14 @@ One image because both halves share the same code and dependencies. Two
 over, Docker restarts the API rather than taking the UI down with it, and the
 two have separate logs.
 
-Inside the compose network the app reaches the API as `http://api:8000`, set
-in `docker-compose.yml` as an `environment` entry so it overrides the
-host-side `API_URL` in `.env`. Charts, PDFs and the disk cache live in named
+Inside the compose network the app reaches the API as `http://api:8000` -
+`API_URL`, set in `docker-compose.yml` as an `environment` entry so it
+overrides the host-side value in `.env`. Chart images use a **second**
+address, `API_PUBLIC_URL=http://localhost:8000`: those load in the reader's
+*browser*, not on the app's server, and the browser has never heard of a host
+named `api` - only `docker-compose.yml`'s own comment on this, and the
+matching one on `API_PUBLIC_URL` in `config.py`, explain why two addresses
+are needed instead of one. Charts, PDFs and the disk cache live in named
 volumes, so a restart does not lose a report or re-fetch everything from
 Yahoo. Keys are read from `.env` at run time and never baked into the image
 (`.dockerignore` excludes it).
@@ -114,16 +121,27 @@ Yahoo. Keys are read from `.env` at run time and never baked into the image
 To run just one half:
 
 ```bash
+# Step 1: build the image. Only needs repeating when requirements.txt or the
+# source changes - Docker reuses the cached layers otherwise.
 docker build -t crew .
-docker run --env-file .env -p 8000:8000 crew          # the API (default CMD)
+
+# Step 2: run it as the API (the image's default command, so nothing after
+# `crew` is needed). --env-file hands in the keys at run time; they are
+# never baked into the image itself.
+docker run --env-file .env -p 8000:8000 crew
 ```
 
-**Verification status:** `docker compose config` validates and resolves
-correctly (checked — including that `API_URL` really does become
-`http://api:8000` for the app container). The image itself was built and run
-successfully at an earlier, single-process stage. The two-container setup has
-**not been built end to end** in this environment, so treat `compose up` as
-reviewed-but-unrun rather than proven.
+Running the Streamlit half by itself this way needs two extra flags for the
+two addresses above — see the longer comment in the `Dockerfile` next to its
+`CMD` line for the exact command, and why compose is the easier path.
+
+**Verification status:** `docker compose up --build` has been run end to
+end — both containers came up healthy, and `/health` on the API and the app's
+port both responded. A real bug was caught before that run: chart images
+would have silently broken in the two-container setup, because the one
+`API_URL` it used was also handed to the browser, which cannot resolve
+`api` as a hostname. Fixed with the `API_PUBLIC_URL` split described above,
+and covered by `tests/test_api_client.py`.
 
 Tests and the eval:
 
@@ -165,7 +183,8 @@ models and no llama at all, so a name that had worked the day before returned
 name:
 
 ```bash
-curl -H "Authorization: Bearer $GROQ_API_KEY" -H "User-Agent: crew"      https://api.groq.com/openai/v1/models
+curl -H "Authorization: Bearer $GROQ_API_KEY" -H "User-Agent: crew" \
+     https://api.groq.com/openai/v1/models
 ```
 
 `groq/compound` looks tempting at 70,000 tokens/minute against 8,000, but it is

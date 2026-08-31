@@ -1,7 +1,7 @@
 """Test settings.
 
-Most tests run offline in about a second. The ones that call Yahoo Finance or
-the model are marked "live" and are skipped unless you ask for them:
+Fast tests run offline. Tests that need Groq or Yahoo are marked "live" and
+skipped unless you add --live:
 
     pytest tests/ -q            the fast suite
     pytest tests/ -q --live     the fast suite plus the live checks

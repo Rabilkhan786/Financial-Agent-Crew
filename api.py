@@ -1,8 +1,5 @@
-"""The FastAPI service: the only thing that runs the crew.
-
-Everything that needs a model, a network call or a pandas object lives behind
-this API. The Streamlit app talks to it over HTTP and holds none of it, which
-is what lets the two be run, deployed and restarted separately.
+"""This is the FastAPI service. It runs the crew and sends back the report.
+The Streamlit app calls this instead of running the crew itself.
 
     uvicorn api:app --reload --port 8000
 
@@ -138,9 +135,8 @@ def analyse_stream(request: AnalysisRequest):
 @app.get("/charts/{filename}")
 def chart(filename: str):
     """One of the PNGs the data analyst drew."""
-    # Only ever a bare filename from this app's own output folder. A path with
-    # a directory in it is refused rather than resolved, so a crafted name
-    # cannot reach outside the folder.
+    # Must be a bare filename, no directory part - stops a crafted name from
+    # reaching outside the output folder.
     if pathlib.Path(filename).name != filename:
         raise HTTPException(status_code=400, detail="bad filename")
     path = config.OUTPUT_DIR / filename

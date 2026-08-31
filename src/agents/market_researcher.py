@@ -1,8 +1,7 @@
-"""Gathers what is being said about the company, and summarises it.
+"""Reads news and social posts about the company, and summarises them.
 
-News headlines and retail posts only. This agent never touches the financial
-statements - that is the fundamentals analyst's job, and keeping them separate
-is what lets the orchestrator later notice when the two disagree.
+This file does not look at financial statements — that is a different
+agent's job.
 """
 
 from src import config, llm, state
@@ -84,9 +83,9 @@ def run(crew_state):
         revision=revision,
     ))
 
-    # Check the researcher against its own sources before the summary travels on.
-    # The report writer treats this text as supplied fact, so a number invented
-    # here becomes a number in the final report.
+    # Check the summary against its own sources before it moves on. The
+    # report writer treats this text as fact, so an invented number here
+    # would end up in the final report.
     sources = {"research": {"articles": headlines["articles"], "social": chatter}}
     invented = sourcing.unsourced_numbers(sources, summary_text)
     if invented:

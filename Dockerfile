@@ -1,33 +1,38 @@
 FROM python:3.11-slim
 
-# uv comes from its official image. Pinned rather than :latest so a rebuild
-# months from now installs the same way this one did - and pinned to the same
-# version used locally, which is the point of using uv in both places.
+# Pinned uv version so a rebuild later installs the same way this one did.
 COPY --from=ghcr.io/astral-sh/uv:0.11.6 /uv /usr/local/bin/uv
 
 WORKDIR /app
 
-# Dependencies first: this layer is cached until requirements.txt changes.
+# Installed before the app code, so this layer stays cached between builds.
 COPY requirements.txt .
 RUN uv pip install --system --no-cache -r requirements.txt
 
 COPY . .
 
-# Charts, PDFs and the disk cache are written here at runtime. Both are
-# declared as volumes in docker-compose.yml so they survive a restart.
+# Charts, PDFs and the disk cache are written here. docker-compose.yml
+# mounts both as volumes so they survive a restart.
 RUN mkdir -p output .cache
 
-# 8000 is the API, 8501 is the Streamlit app. One container will use one of
-# them; both are declared because this image can be either.
+# 8000 = API, 8501 = Streamlit app. Each container uses one of them.
 EXPOSE 8000 8501
 
-# The API is the default: it is the half that actually does the work, and the
-# app is useless without it. docker-compose.yml overrides this for the front
-# end. Run either directly with:
+# Default: run as the API. docker-compose.yml overrides this for the app
+# container - use `docker compose up --build` to run both normally.
 #
+# To run one container by hand instead:
+#
+#   docker build -t crew .
 #   docker run --env-file .env -p 8000:8000 crew
-#   docker run --env-file .env -p 8501:8501 -e API_URL=http://host.docker.internal:8000 \
+#
+#   docker run --env-file .env -p 8501:8501 \
+#     -e API_URL=http://host.docker.internal:8000 \
+#     -e API_PUBLIC_URL=http://localhost:8000 \
 #     crew streamlit run app.py --server.address=0.0.0.0 --server.headless=true
 #
-# Keys are passed in at run time (--env-file .env), never baked into the image.
+# Two different API addresses because they're used by two different callers:
+# API_URL is used by this container to reach the API container. API_PUBLIC_URL
+# is used by the reader's browser, which can't resolve host.docker.internal.
+# See config.py's comment on API_PUBLIC_URL.
 CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000"]

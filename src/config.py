@@ -1,11 +1,6 @@
-"""One place for every setting and every key.
+"""Reads all settings from the .env file.
 
-`.env` is read once, here, at startup. Nothing else in the project calls
-`os.getenv`, so there is a single file to look at when asking "what does this
-need to run?" or "why is that feature switched off?".
-
-Only GROQ_API_KEY is required. Every other key is optional and switches on an
-extra capability; the app runs without all of them.
+Only GROQ_API_KEY is required, everything else is optional.
 """
 
 import logging
@@ -28,27 +23,30 @@ GROQ_API_KEY = _get("GROQ_API_KEY")
 GROQ_MODEL = _get("GROQ_MODEL", "openai/gpt-oss-120b")
 LLM_TEMPERATURE = float(_get("LLM_TEMPERATURE", "0.2") or 0.2)
 
-# The free tier allows a few thousand tokens a minute, and one report uses a
-# lot of them. Pacing the calls keeps a ten-company run under the limit; the
-# retry in llm.py is only the backstop.
+# Free tier limit is a few thousand tokens a minute. Pacing calls keeps a
+# ten-company run under it; the retry in llm.py is just the backstop.
 CALLS_PER_SECOND = float(_get("CALLS_PER_SECOND", "0.12") or 0.12)
 
-# How long to let one model call run. A reasoning model thinks before it
-# writes, and the report prompt is the longest one here, so the default was
-# too short and those calls were cut off mid-answer.
+# Reasoning models think before they write, so the report prompt needs a
+# longer timeout than the default.
 REQUEST_TIMEOUT = float(_get("REQUEST_TIMEOUT", "180") or 180)
 
-# How much the model may write in one answer. A reasoning model spends part of
-# this budget thinking before it writes anything, and the default was small
-# enough that the whole budget went on thought: the reply came back empty and
-# the report was printed with no sections at all. Big enough for both now.
+# Also higher than default: a reasoning model spends part of this budget
+# thinking, so a small limit left no room for the actual report.
 MAX_OUTPUT_TOKENS = int(_get("MAX_OUTPUT_TOKENS", "4096") or 4096)
 
 # --- Where the Streamlit app finds the API ----------------------------------
-# The app makes no model calls and no data fetches of its own; it asks the
-# FastAPI service for everything. Pointing this at a deployed API is the only
-# change needed to run the two halves on different machines.
+# The app has no model calls or data fetches of its own - it asks the API
+# for everything.
 API_URL = _get("API_URL", "http://localhost:8000")
+
+# API_URL is used server-side (inside Docker Compose that's http://api:8000,
+# only reachable between containers). Chart images are the one exception:
+# the browser loads them directly, and it can't resolve "api" as a host.
+# API_PUBLIC_URL is that browser-facing address. Defaults to API_URL, which
+# is correct anywhere both halves share one "localhost". docker-compose.yml
+# is the one place that sets it differently.
+API_PUBLIC_URL = _get("API_PUBLIC_URL", "") or API_URL
 
 # --- Optional: extra data sources -------------------------------------------
 FINNHUB_API_KEY = _get("FINNHUB_API_KEY")
@@ -65,14 +63,13 @@ CACHE_DIR = Path(_get("CACHE_DIR", ".cache"))
 OUTPUT_DIR = Path(_get("OUTPUT_DIR", "output"))
 
 # --- Tunables ---------------------------------------------------------------
-# The revise loop is capped so a disagreement between agents cannot spin
-# forever; LangGraph's own recursion limit is the backstop behind that.
+# Caps the revise loop so agents can't disagree forever. LangGraph's own
+# recursion limit is the backstop behind that.
 MAX_REVISIONS = int(_get("MAX_REVISIONS", "2") or 2)
 RECURSION_LIMIT = int(_get("RECURSION_LIMIT", "25") or 25)
 
-# Sharpe needs a risk-free rate. It differs by market and by year, so it is a
-# setting rather than a number buried in the maths, and the report states which
-# rate was used.
+# Sharpe needs a risk-free rate, and it differs by market and year, so it's a
+# setting, not a number buried in the maths.
 RISK_FREE_RATE = float(_get("RISK_FREE_RATE", "0.0") or 0.0)
 
 # How long each kind of fetched data stays usable before it is fetched again.
@@ -110,9 +107,8 @@ def enabled_sources():
 
 
 # --- Logging ----------------------------------------------------------------
-# Every fetch, cache hit and agent step is logged. During a multi-agent run the
-# log is often the only way to see which agent asked for what, and in which
-# order, without attaching a debugger.
+# Every fetch, cache hit and agent step is logged - the log is the easiest
+# way to see who asked for what, in what order, during a run.
 LOG_LEVEL = _get("LOG_LEVEL", "INFO").upper()
 LOG_FILE = OUTPUT_DIR / "run.log"
 

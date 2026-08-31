@@ -1,7 +1,6 @@
-"""Looks at the share price and how it behaved, and draws the charts.
+"""Looks at the share price and draws the charts.
 
-All the price maths happens in tools/kpi.py. This agent gets the finished
-numbers and explains them, same rule as the fundamentals analyst.
+The maths is done in tools/kpi.py — this file only explains the numbers.
 """
 
 from src import charts, config, formatting, llm, state

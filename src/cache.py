@@ -1,13 +1,7 @@
-"""Disk cache for every external call.
+"""Saves fetched data to disk so we don't fetch it again.
 
-Rule 6 of the project: nothing is fetched twice. Prices, statements, news and
-social posts all go through here, keyed by ticker and date, so re-running an
-analysis costs nothing and a demo works even when a provider is rate-limiting.
-
-The cache is a folder of pickled files under `.cache/`. Pickle is used rather
-than JSON because it stores a pandas DataFrame and a plain dict through exactly
-the same code path — one way in, one way out, nothing to special-case. The
-folder is local, disposable and gitignored: deleting it only costs a re-fetch.
+Files are saved in the `.cache/` folder, one per ticker and date. Safe to
+delete anytime — it will just fetch again.
 """
 
 import hashlib

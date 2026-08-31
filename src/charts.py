@@ -1,7 +1,6 @@
-"""The five charts, saved as PNG files.
+"""Draws the 5 charts and saves them as PNG files.
 
-Saved to disk so the Streamlit app and the PDF show the same picture.
-Each function returns the file path, or None if the data is missing.
+Used by both the app and the PDF.
 """
 
 import matplotlib

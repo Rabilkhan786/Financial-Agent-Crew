@@ -1,9 +1,6 @@
-"""Price numbers. Plain pandas and numpy, no LLM and no internet.
+"""Calculates price numbers like return and risk.
 
-Same rule as ratios.py: the maths happens here so it can be tested, and the
-LLM only reads the answers.
-
-Input: closing prices as a pandas Series with dates as the index, oldest first.
+No LLM used here, just pandas and numpy, so it can be tested.
 """
 
 import numpy as np

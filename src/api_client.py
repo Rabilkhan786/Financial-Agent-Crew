@@ -1,9 +1,7 @@
-"""Talking to the FastAPI service.
+"""This file sends requests to the API.
 
-The Streamlit app imports this and nothing else that touches the crew. Keeping
-every request in one file means the app never has to know a URL, a timeout or
-a status code - and swapping a local API for a deployed one is a change to
-API_URL in .env, not to the app.
+The Streamlit app uses this file only, so it never needs to know the API's
+URL or how to call it directly.
 """
 
 import json
@@ -14,9 +12,8 @@ from src import config
 
 log = config.get_logger(__name__)
 
-# A whole crew run is minutes, not seconds, and the free tier paces its own
-# calls on top of that. A short timeout here would cut off a run that was
-# working perfectly well.
+# A crew run takes minutes, not seconds - the free tier paces its own calls
+# on top of that. A short timeout here would cut off a run that was working.
 RUN_TIMEOUT = 900
 QUICK_TIMEOUT = 15
 
@@ -26,7 +23,14 @@ class ApiError(Exception):
 
 
 def url_for(path):
+    """A URL the Streamlit SERVER can reach. Do not use this for anything
+    that ends up in HTML the browser fetches on its own - see chart_url()."""
     return f"{config.API_URL.rstrip('/')}{path}"
+
+
+def public_url_for(path):
+    """A URL the reader's BROWSER can reach. Only chart_url() needs this one."""
+    return f"{config.API_PUBLIC_URL.rstrip('/')}{path}"
 
 
 def health():
@@ -77,5 +81,10 @@ def fetch_pdf(pdf_url):
 
 
 def chart_url(path):
-    """A chart path from the API, as something st.image can load."""
-    return url_for(path)
+    """A chart path from the API, as something st.image can load.
+
+    Deliberately public_url_for(), not url_for(): this URL goes into an <img>
+    tag and is fetched by the reader's browser, not by this server, so it
+    needs an address the browser can reach - see API_PUBLIC_URL in config.py.
+    """
+    return public_url_for(path)

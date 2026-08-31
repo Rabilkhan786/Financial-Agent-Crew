@@ -1,9 +1,5 @@
-"""Prices, the benchmark index, and company profile — from Yahoo Finance.
-
-This module fetches; it does not judge. Everything it returns is handed to
-`kpi.py` and `ratios.py` for the arithmetic. The one calculation done here is
-the historical P/E and P/B series, because building it needs prices and
-statements side by side — and it is still plain division, not an estimate.
+"""Fetches prices, the company profile, and the benchmark index from Yahoo
+Finance.
 """
 
 import datetime as dt
@@ -19,12 +15,11 @@ log = config.get_logger(__name__)
 CACHE_MAX_AGE_HOURS = config.CACHE_HOURS_PRICES
 VALUATION_LOOKBACK_DAYS = 40      # nearest trading day to a fiscal year end
 
-# yfinance's history() takes a timeout directly; a stalled connection times out
-# rather than hanging the agent that called it. Its other calls (.info, the
-# statements, .news) go through an internal session with no exposed timeout -
-# checked, and a custom requests.Session breaks yfinance's own cookie/crumb
-# handling and gets rate-limited immediately, which is worse than the hang it
-# was meant to fix. Those stay as they are.
+# Only history() takes a timeout directly. yfinance's other calls (.info,
+# statements, .news) have no exposed timeout, and forcing one with a custom
+# requests.Session breaks yfinance's cookie handling and gets rate-limited
+# immediately - worse than the hang it was meant to fix. So those stay as
+# they are.
 REQUEST_TIMEOUT = 20
 
 

@@ -1,10 +1,7 @@
-"""Fundamental ratios. Plain pandas and numpy, no LLM and no internet.
+"""Calculates all financial ratios like margin, growth, and debt.
 
-Every fundamental number in the report is worked out here so it can be tested
-and checked by hand. The LLM only reads these numbers, it never calculates them.
-
-Input: one table with a row per financial year (oldest first) and the columns
-named below. statements.py builds that table from Yahoo data.
+No LLM used here, just pandas and numpy, so it can be tested and checked by
+hand.
 """
 
 import numpy as np

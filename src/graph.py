@@ -1,15 +1,12 @@
-"""Wires the agents together into a LangGraph workflow.
+"""Connects all agents together using LangGraph.
 
 START -> orchestrator -> (ticker invalid? -> END)
                        -> market_researcher -> fundamentals_analyst
       -> data_analyst -> report_writer -> orchestrator_review
       -> back to one of the two analysts, or END.
 
-Two conditional edges, both plain functions in orchestrator.py: one right
-after intake, so a ticker Yahoo cannot confirm never reaches the agents that
-would otherwise fetch news, statements and prices for nothing; one after the
-review, which can send the work back. The loop back is why this is a graph
-and not a plain list of function calls.
+If the ticker is wrong, it stops early. If the review finds a problem, it
+sends the work back to fix it.
 """
 
 from langgraph.graph import END, START, StateGraph

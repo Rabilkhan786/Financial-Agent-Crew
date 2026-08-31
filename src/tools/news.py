@@ -1,17 +1,7 @@
-"""Recent news about a company, with optional scored sentiment.
+"""Fetches recent news about the company.
 
-Three backends, none of them required:
-
-* **Yahoo Finance** via yfinance — the default, no key, headline plus a short
-  summary.
-* **Finnhub** — used instead when FINNHUB_API_KEY is set. Same idea but with
-  fuller article summaries and better date coverage.
-* **Alpha Vantage NEWS_SENTIMENT** — used *as well*, when ALPHAVANTAGE_API_KEY
-  is set, to attach a sentiment score to the coverage.
-
-The sentiment number is produced by the provider and averaged here in Python.
-It is never estimated by the LLM: a model asked to score tone will happily
-invent a precise-looking number, and a made-up 0.42 is worse than no score.
+Uses Yahoo Finance by default. Uses Finnhub and Alpha Vantage too, if you
+add their keys.
 """
 
 import datetime as dt
@@ -169,9 +159,9 @@ def fetch_news(ticker, limit=DEFAULT_LIMIT, days=DEFAULT_DAYS, use_cache=True):
         articles: list[dict] = []
         source = "Yahoo Finance"
         if finnhub_key:
-            # Free Finnhub plans cover US listings but refuse other exchanges
-            # outright, with a 403 rather than an empty list. Either an error or
-            # an empty result falls back to Yahoo rather than losing the news.
+            # Free Finnhub plans 403 on non-US exchanges instead of returning
+            # an empty list. Either way, fall back to Yahoo rather than lose
+            # the news.
             try:
                 articles = _fetch_finnhub(ticker, limit, days, finnhub_key)
                 source = "Finnhub"
@@ -179,7 +169,8 @@ def fetch_news(ticker, limit=DEFAULT_LIMIT, days=DEFAULT_DAYS, use_cache=True):
                 log.warning("Finnhub refused %s (%s) - falling back to Yahoo", ticker, error)
                 articles = []
         if not articles:
-            articles, source = _fetch_yahoo(ticker, limit), "Yahoo Finance"
+            articles = _fetch_yahoo(ticker, limit)
+            source = "Yahoo Finance"
 
         sentiment = None
         if alphavantage_key:

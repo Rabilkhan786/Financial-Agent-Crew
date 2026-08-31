@@ -1,8 +1,6 @@
-"""The shared state that every agent reads from and writes to.
+"""This is the shared data every agent reads and writes.
 
-LangGraph passes one dictionary through the whole graph. Each agent adds its
-own part and leaves the rest alone. Keeping it in one TypedDict means there is
-a single list of everything the crew knows about a company.
+One agent adds its part, then passes it to the next agent.
 """
 
 import operator

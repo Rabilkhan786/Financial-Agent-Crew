@@ -1,17 +1,7 @@
-"""Turning a crew state into something that survives a trip over HTTP.
+"""Turns the report data into a format that can be sent over the internet
+(JSON).
 
-The crew state holds pandas Series (the statement history, the price history)
-and numpy scalars, and none of that is JSON. This module converts it once, on
-the API side, so the Streamlit client never has to know a pandas object was
-ever involved.
-
-Two rules worth stating, because both were bugs waiting to happen:
-
-* NaN and infinity are not valid JSON. Python's own json module writes them as
-  bare NaN / Infinity, which parses in Python and fails in a browser. They
-  become null here instead.
-* A Series index is usually a Timestamp. It becomes an ISO date string, not a
-  millisecond epoch number, so the client can show it without guessing a unit.
+Pandas data and NaN values are not valid JSON, so they get converted here.
 """
 
 import math

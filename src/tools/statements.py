@@ -1,15 +1,7 @@
-"""Annual financial statements from Yahoo Finance, in the shape `ratios.py` expects.
+"""Fetches financial statements from Yahoo Finance and renames the columns
+so ratios.py can use them.
 
-Yahoo names its line items its own way ("Total Revenue", "Stockholders Equity",
-"Capital Expenditure"). This module is the only place that knows those names.
-It maps them onto the canonical columns in `ratios.py`, so the maths layer stays
-provider-agnostic and could be pointed at a different source without changing a
-single ratio.
-
-Rule 5 of the project: a line item Yahoo does not have is reported as missing,
-never inferred, never quietly replaced by a similar-looking one. Gaps are common
-for smaller companies and for anyone reporting unusual line items, and a report
-that admits a gap is worth more than one that fills it with a guess.
+If Yahoo does not have a number, it is marked missing, never guessed.
 """
 
 import pandas as pd
@@ -23,9 +15,8 @@ log = config.get_logger(__name__)
 CACHE_MAX_AGE_HOURS = config.CACHE_HOURS_STATEMENTS
 DEFAULT_YEARS = config.STATEMENT_YEARS
 
-# Canonical column -> the Yahoo row names to try, in order of preference.
-# Several alternatives are listed because Yahoo uses different labels for
-# different companies and exchanges.
+# Canonical column -> Yahoo row names to try, in order. Several alternatives
+# per field because Yahoo labels the same thing differently across companies.
 FIELD_MAP = {
     ratios.REVENUE: ["Total Revenue", "Operating Revenue"],
     ratios.OPERATING_INCOME: ["Operating Income", "Total Operating Income As Reported"],

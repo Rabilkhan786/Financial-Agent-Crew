@@ -1,19 +1,9 @@
-"""Runs the crew over 10 companies and checks three things about each report.
+"""Runs the crew on 10 companies and checks each report.
 
-The three checks are the ones that matter for this project:
+Checks: no blank numbers, no made-up numbers, all sections present.
 
-1. No blanks. A NaN reaching the report means a calculation failed quietly.
-2. No invented numbers. Every figure in the report must come from something we
-   calculated. This is the check that proves the LLM is not doing arithmetic.
-3. All sections present. A missing section means the writer skipped part of the
-   job.
-
-Each company also gets one of four classifications, not just pass/fail:
-PASS, FAIL, DATA_UNAVAILABLE (Yahoo had nothing for the ticker), or
-PROVIDER_LIMIT (the model did not answer - almost always the free tier's daily
-or per-minute token limit). The three checks above measure report quality;
-classify() is what keeps a provider outage from being reported as if it were
-a bug in the crew.
+Each company also gets marked PASS, FAIL, DATA_UNAVAILABLE, or
+PROVIDER_LIMIT, so a bad answer is not confused with a provider problem.
 
 Run it with:  python -m evals.run_eval
                  or on a subset:  python -m evals.run_eval AAPL MSFT
@@ -29,16 +19,11 @@ from src.tools import sourcing
 
 log = config.get_logger(__name__)
 
-# Ten US companies, picked so the checks are not all run against easy cases.
-# Five are healthy; five are meant to set off the red-flag rules. Boeing is
-# heavily borrowed with thin interest cover, Ford and AT&T carry heavy debt,
-# Intel burns cash, and Lumen manages negative equity, high leverage, thin
-# cover and falling revenue at once. A run where nothing is flagged proves
-# nothing.
+# Ten US companies. Five are healthy, five should trigger red flags: Boeing
+# (thin interest cover), Ford and AT&T (heavy debt), Intel (cash burn), Lumen
+# (negative equity, high leverage, falling revenue).
 #
-# Walgreens (WBA) used to be here and was dropped: it was taken private, so
-# Yahoo returns no data at all and its "failure" was an empty report rather
-# than anything the checks were meant to find.
+# WBA was dropped: it went private, so Yahoo has no data for it at all.
 TICKERS = ["AAPL", "MSFT", "JNJ", "KO", "PG",
            "F", "T", "INTC", "BA", "LUMN"]
 
@@ -93,10 +78,9 @@ def classify(result):
         return "FAIL"
 
     if STUB_REPORT_MARKER in (result.get("report") or ""):
-        # The model never answered - almost always the free tier's daily or
-        # per-minute token limit. Checked first: even when no statement or
-        # price data was fetched either, a stub report is the more specific,
-        # more useful thing to say happened.
+        # The model never answered - almost always a free tier token limit.
+        # Checked first since it's the more specific, more useful thing to
+        # report than "no data fetched".
         return "PROVIDER_LIMIT"
 
     no_metrics = not result.get("fundamentals", {}).get("metrics")

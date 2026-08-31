@@ -1,8 +1,7 @@
-"""Turning numbers into readable text.
+"""Turns numbers into text that is easy to read.
 
-One place for this so the app, the PDF and the agents all print a ratio the
-same way. Without it the same formatting rules get copied into three files and
-drift apart.
+Used by the app, the PDF, and the agents, so numbers look the same
+everywhere.
 """
 
 # Metrics that read better as percentages than as raw decimals.
@@ -39,10 +38,9 @@ def label(name):
     return LABELS.get(name, name.replace("_", " ").capitalize())
 
 
-# What period, source and formula back each metric — for the app's evidence
-# table. Written by hand against the actual functions in ratios.py and
-# kpi.py, not generated, so it can go stale if a formula changes there
-# without this being updated too.
+# Source and formula behind each metric, for the app's evidence table.
+# Written by hand to match ratios.py and kpi.py - update it if a formula
+# changes there.
 _STATEMENTS = "Yahoo Finance statements"
 _PRICES = "Yahoo Finance closing prices"
 _LATEST_YEAR = "latest fiscal year"

@@ -1,18 +1,15 @@
-"""Writes the final report.
+"""Writes the final report using what other agents already found.
 
-This file imports nothing from tools/. It only reads what the other agents put
-in the state. That keeps one clear rule: by the time we get here, every number
-has already been worked out and checked, and writing cannot quietly change it.
+It does not calculate anything itself.
 """
 
 from src import config, formatting, llm, state
 
 log = config.get_logger(__name__)
 
-# What goes in the report when the model does not answer at all - usually the
-# free tier's daily or per-minute token limit. Named here so evals/run_eval.py
-# can recognise this exact failure and not confuse it with a genuine quality
-# problem in the report.
+# What the report says when the model doesn't answer at all - usually a free
+# tier token limit. Named here so evals/run_eval.py can tell this apart from
+# a real quality problem in the report.
 STUB_REPORT_MARKER = ("The report could not be written because the language "
                       "model did not respond.")
 
@@ -150,12 +147,10 @@ def run(crew_state):
         conflicts = ("THE REVIEWER RAISED THESE POINTS - you must address each one:\n"
                      + "\n".join(f"- {item[:400]}" for item in recent))
 
-    # Every piece is capped. A provider refuses outright any single request
-    # larger than its per-minute token allowance, and pasting three agents'
-    # full write-ups plus the growing revision notes went over it - the writer
-    # then produced nothing and the report came back as a stub. The numbers
-    # below are short because they are already worked out; it is the prose that
-    # has to be kept in check.
+    # Every piece is capped. Pasting three agents' full write-ups plus the
+    # growing revision notes went over the provider's per-request token
+    # limit, and the writer produced nothing. The numbers stay short because
+    # they're already worked out - it's the prose that needs trimming.
     body = llm.ask(PROMPT.format(
         company=crew_state.get("company") or ticker,
         ticker=ticker,

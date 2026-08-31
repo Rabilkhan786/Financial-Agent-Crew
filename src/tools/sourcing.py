@@ -1,12 +1,7 @@
-"""Checking that every number in a report came from somewhere real.
+"""Checks that every number in the report is real — either calculated or
+found in a real headline.
 
-Pure python: no LLM, no network. The rule is simple - a figure in the report
-must trace back either to something we calculated, or to a headline we actually
-fetched. Anything else the model brought from its own memory, and a made-up
-number in a financial report is the worst failure this project can have.
-
-Used by the reviewer, so a report that breaks the rule is sent back, and by the
-eval, so both measure the same thing.
+If a number is made up, the report gets sent back.
 """
 
 import math

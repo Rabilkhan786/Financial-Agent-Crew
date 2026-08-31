@@ -1,13 +1,10 @@
-"""Turns the finished report into a PDF.
+"""Turns the report into a PDF file.
 
-Two fpdf2 details worth knowing, both learned the hard way:
-
-1. The built-in fonts only handle latin-1. A smart quote or a dash copied out
-   of a news headline crashes the whole export, so every string is cleaned
-   first.
-2. After an image or a table, the cursor can be left somewhere unexpected and
-   the next block of text comes out squashed. Calling set_x(l_margin) before
-   each multi_cell puts it back at the left margin every time.
+Two things to know:
+1. The PDF font only supports plain English letters, so special characters
+   (smart quotes, dashes) are cleaned first, or the export crashes.
+2. The cursor position is reset before each paragraph, or the text comes out
+   in the wrong place after an image or table.
 """
 
 from fpdf import FPDF

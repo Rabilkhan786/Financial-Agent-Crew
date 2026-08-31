@@ -1,8 +1,7 @@
-"""Runs the crew: sets the job up at the start, and reviews the report at the end.
+"""Starts the crew and reviews the final report.
 
-The review is the interesting part. It looks for places where the fundamentals
-and the market research do not agree, and sends the report back to whichever
-agent can fix it. The loop is capped so two agents cannot argue forever.
+If the fundamentals and the news disagree, it sends the report back to fix
+it. This can only happen a few times, so it does not loop forever.
 """
 
 from pydantic import BaseModel, Field
@@ -20,9 +19,9 @@ class ReviewDecision(BaseModel):
     parse by hand and no code fence to strip.
     """
 
-    # Deliberately not a plain bool. Some models answer "true" as a string, and
-    # the provider then rejects the whole call for not matching the schema -
-    # which silently cost us the check. Accept either and decide in code.
+    # Not a plain bool on purpose. Some models answer "true" as a string, and
+    # the provider then rejects the whole call. Accept either and check it in
+    # code instead.
     conflict: bool | str = Field(description="true or false")
     target: str = Field(default="",
                         description="fundamentals_analyst, market_researcher, or empty")
@@ -151,11 +150,10 @@ def review(crew_state):
             "conversation_log": [state.note("orchestrator_review", reason)],
         }
 
-    # Second certain check: did the report state a number that came from
-    # nowhere? The model is told to quote only what it was given, but it will
-    # sometimes reach into its own memory - turning a sourced "34% jump" into
-    # an invented "34-45%" range. A made-up figure in a financial report is the
-    # worst thing this project can produce, so it goes back.
+    # Second check: did the report use a number that traces back to nothing?
+    # The model is told to only quote numbers it was given, but it sometimes
+    # doesn't. A made-up figure in a financial report is the worst thing this
+    # project can produce, so it goes back for a fix.
     invented = sourcing.unsourced_numbers(crew_state)
     if invented:
         reason = ("These numbers appear in the report but come from no calculation "
@@ -174,11 +172,10 @@ def review(crew_state):
     research = crew_state.get("research", {})
     flags = fundamentals.get("red_flags", [])
 
-    # Everything below is trimmed on purpose. A provider refuses outright any
-    # single request bigger than its per-minute token allowance, and sending
-    # the whole report plus every interpretation went over it - the reviewer
-    # then failed with "request too large" and no contradiction was ever found.
-    # The checks that need the full text are the deterministic ones above.
+    # Everything below is trimmed on purpose. Sending the whole report plus
+    # every interpretation went over the provider's per-request token limit
+    # and the call failed outright. The checks that need the full text are
+    # the deterministic ones above, not this one.
     answer = llm.ask_structured(REVIEW_PROMPT.format(
         fundamentals=(fundamentals.get("interpretation") or "not available")[:1500],
         research=(research.get("summary") or "not available")[:1000],

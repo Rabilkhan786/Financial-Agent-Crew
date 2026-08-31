@@ -1,9 +1,5 @@
-"""The Streamlit app: type a ticker, get a report.
-
-This is the front end and nothing else. It runs no agents, calls no model and
-fetches no market data - it asks the FastAPI service (api.py) for all of that
-over HTTP. The only project modules it imports are the API client, the config
-that tells it where the API is, and the shared formatting helpers.
+"""This is the Streamlit app. It only shows the report, it does not run any
+agents itself. It calls the API (api.py) for everything.
 
 Run the API first, then this:
 
@@ -100,9 +96,9 @@ def series_frame(series_by_name, wanted):
 
 
 if run_it and api_reachable:
-    # The API streams one line per agent as it finishes, so this shows the crew
-    # working rather than a blank spinner. result stays None until the final
-    # line arrives: a stream that ends early must not look like a success.
+    # The API streams one line per agent as it finishes. result stays None
+    # until the last line arrives, so a stream that stops early isn't
+    # mistaken for success.
     with st.status(f"Running the crew on {ticker}", expanded=True) as running:
         result = None
         try:
@@ -245,10 +241,9 @@ with log_tab:
         agent = entry.get("agent")
         message = entry.get("message", "")
         if agent == "orchestrator_review":
-            # orchestrator_review appears once at the very end when the report
-            # is accepted, or in the middle - followed by the agent it sent
-            # work back to - when it is not. That position, not the wording of
-            # the message, is what tells the two apart reliably.
+            # If this is the last log entry, the report was accepted. If not,
+            # work was sent back and more entries follow. Position tells us
+            # which, not the message text.
             accepted = number == len(log_entries)
             icon = "✅" if accepted else "\U0001f501"   # check mark, repeat
             heading = "Reviewer - accepted" if accepted else "Reviewer - sending work back"
@@ -258,9 +253,8 @@ with log_tab:
 
     st.divider()
     if not result.get("report"):
-        # No report was ever attempted - an unconfirmed ticker stops the crew
-        # before report_writer runs, so there is nothing for the reviewer to
-        # have accepted or sent back. Saying "accepted" here would be wrong.
+        # An unconfirmed ticker stops the crew before report_writer runs, so
+        # there's no report to call accepted or sent back.
         st.info("The crew stopped before writing a report - see the errors above.")
     else:
         revisions = result.get("revision_count", 0)

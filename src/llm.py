@@ -1,13 +1,5 @@
-"""The one place that talks to the model.
-
-Groq, through LangChain. Everything that used to be hand-written here is now
-done by the framework:
-
-* `InMemoryRateLimiter` paces the calls so the free tier limit is not hit.
-* `.with_retry()` catches whatever still gets through.
-* `StrOutputParser()` pulls the text out of the reply.
-* `.with_structured_output()` fills in a schema, instead of parsing JSON and
-  stripping code fences by hand.
+"""This file talks to the Groq model. Nothing else in the project calls the
+model directly.
 """
 
 from langchain_core.output_parsers import StrOutputParser
@@ -45,14 +37,11 @@ def get_base():
             api_key=config.GROQ_API_KEY,
             temperature=config.LLM_TEMPERATURE,
             rate_limiter=pace,
-            # Reasoning models otherwise put their whole train of thought in
-            # the answer. It came out as an eight thousand character "report"
-            # that was mostly thinking, with the real headings buried inside.
+            # Without this, reasoning models put their whole train of thought
+            # in the answer instead of just the report.
             reasoning_format="hidden",
-            # A reasoning model thinks before it writes, and the report prompt
-            # is the longest one here. The default timeout cut those calls off
-            # mid-answer, which reached the reader as "the model did not
-            # respond" and a report with no sections.
+            # The report prompt is the longest one here, and the default
+            # timeout was cutting those calls off mid-answer.
             timeout=config.REQUEST_TIMEOUT,
             max_tokens=config.MAX_OUTPUT_TOKENS,
         )
@@ -82,11 +71,12 @@ def ask_structured(prompt, schema):
     the reply itself, so there is no JSON handling to write or to get wrong.
     """
     try:
-        # The retry wrapper has to go on the outside here. Calling
-        # .with_structured_output() on an already-retrying model raises, because
-        # the wrapper does not carry that method - which silently turned every
-        # structured answer into None until it was caught.
-        return get_base().with_structured_output(schema).with_retry(**RETRY).invoke(prompt)
+        # Order matters here. Calling .with_structured_output() on an
+        # already-retrying model raises, since the retry wrapper doesn't
+        # carry that method through.
+        model = get_base().with_structured_output(schema)
+        model = model.with_retry(**RETRY)
+        return model.invoke(prompt)
     except Exception as error:
         log.error("structured call failed: %s", str(error)[:200])
         return None

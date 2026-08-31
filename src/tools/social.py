@@ -1,12 +1,8 @@
-"""Retail chatter about a ticker — optional, and never allowed to break a run.
+"""Fetches recent StockTwits posts about the company, and counts how many
+are bullish or bearish.
 
-StockTwits, keyless: no signup, no key, and each post carries a self-declared
-Bullish/Bearish tag, so the mood can be *counted* rather than guessed at.
-
-Rule 4 of the project: if fewer than five posts are found, `social_sentiment`
-is hardcoded to "insufficient data" and the posts are dropped before the LLM
-ever sees them. A handful of anonymous posts is not a signal, and the surest way
-to stop a model reading meaning into noise is to not show it the noise.
+If there are fewer than 5 posts, it says "insufficient data" instead of
+guessing.
 """
 
 import datetime as dt
@@ -105,9 +101,9 @@ def fetch_social_posts(ticker, limit=DEFAULT_LIMIT, use_cache=True):
     posts = raw.get("posts") or []
     source = raw.get("source", "unavailable")
 
-    # Rule 4, enforced here and not in a prompt: too little chatter is not a
-    # weak signal, it is no signal. The posts are dropped so the model cannot
-    # read a mood into three anonymous messages.
+    # Rule 4: too little chatter is not a weak signal, it's no signal at all.
+    # Posts are dropped here so the model can't read a mood into three
+    # anonymous messages.
     if len(posts) < MIN_POSTS:
         log.info("%s: only %d posts from %s (need %d) - reporting insufficient data",
                  ticker, len(posts), source, MIN_POSTS)

@@ -4,27 +4,21 @@
 #   -> API   at http://localhost:8000  (docs at /docs)
 #   -> app   at http://localhost:8501
 #
-# Two containers rather than two processes in one, because a container that
-# runs one process can be restarted, scaled and logged on its own - and if the
-# API dies here, Docker restarts the API rather than taking the UI with it.
+# Two containers, not two processes in one: if the API crashes, Docker
+# restarts just the API, not the whole UI.
 
 services:
   api:
     build: .
-    # The image's default CMD is already this; stated anyway so that reading
-    # this file tells you what each container runs without opening another.
     command: uvicorn api:app --host 0.0.0.0 --port 8000
     env_file: .env
     ports:
       - "8000:8000"
     volumes:
-      # The API writes the charts and PDFs, and serves them over HTTP. Keeping
-      # them in named volumes means a restart does not lose a report, and the
-      # disk cache does not re-fetch everything from Yahoo again.
+      # Named volumes so charts, PDFs and the cache survive a restart.
       - output:/app/output
       - cache:/app/.cache
     healthcheck:
-      # Uses python rather than curl so the slim image needs nothing extra.
       test: ["CMD", "python", "-c",
              "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
@@ -38,19 +32,17 @@ services:
     command: streamlit run app.py --server.port=8501 --server.address=0.0.0.0 --server.headless=true
     env_file: .env
     environment:
-      # Inside the compose network the API is reachable by service name, not on
-      # localhost - localhost in this container is this container. This has to
-      # come after env_file to win: compose lets `environment` override it, and
-      # .env carries the host-side value (http://localhost:8000) for running
-      # the two outside Docker.
+      # API_URL: used by the Streamlit server itself, so it needs the
+      # in-network service name "api", not localhost.
       - API_URL=http://api:8000
+      # API_PUBLIC_URL: used by the reader's browser to load chart images,
+      # so it needs a host-reachable address instead. See config.py.
+      - API_PUBLIC_URL=http://localhost:8000
     ports:
       - "8501:8501"
     depends_on:
       api:
-        # Waits for /health to answer, not merely for the container to exist,
-        # so the first page load does not show "could not reach the API".
-        condition: service_healthy
+        condition: service_healthy   # wait for /health, not just container start
     restart: unless-stopped
 
 volumes:
