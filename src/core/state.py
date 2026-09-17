@@ -1,4 +1,4 @@
-"""Shared LangGraph state for one analysis run."""
+"""Shared LangGraph state for one financial analysis run."""
 
 import operator
 from typing import Annotated, TypedDict
@@ -7,8 +7,11 @@ from src.components import config
 
 
 class CrewState(TypedDict, total=False):
+    """Values passed between LangGraph nodes during one run."""
+
     ticker: str
     company: str
+    profile: dict
     start_date: str
     end_date: str
     ticker_valid: bool
@@ -28,10 +31,11 @@ class CrewState(TypedDict, total=False):
 
 
 def new_state(ticker, start_date, end_date):
-    """Return the starting state for a new company analysis."""
+    """Create the initial state for a new company analysis."""
     return CrewState(
         ticker=ticker.strip().upper(),
         company="",
+        profile={},
         start_date=start_date,
         end_date=end_date,
         ticker_valid=True,
