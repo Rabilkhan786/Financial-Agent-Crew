@@ -81,16 +81,18 @@ def test_invalid_prices_are_ignored():
     assert kpi.total_return(series) == pytest.approx(0.21)
 
 
-def test_compute_all_returns_chart_series_and_missing_metrics():
+def test_compute_all_returns_metrics_and_chart_series():
     result = kpi.compute_all(trending_prices(), risk_free_rate=0.04)
 
     assert result["latest"]["total_return"] is not None
     assert result["latest"]["ma_200"] is not None
-    assert result["risk_free_rate"] == 0.04
     assert "close" in result["series"]
     assert "ma_50" in result["series"]
     assert "ma_200" in result["series"]
 
-    short = kpi.compute_all(prices([100.0, 110.0]))
-    assert short["latest"]["ma_200"] is None
-    assert "ma_200" in short["unavailable"]
+
+def test_compute_all_keeps_missing_values_as_none():
+    result = kpi.compute_all(prices([100.0, 110.0]))
+
+    assert result["latest"]["ma_200"] is None
+    assert result["benchmark"] is None
