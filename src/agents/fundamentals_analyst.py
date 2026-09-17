@@ -46,7 +46,6 @@ def run(crew_state):
             "fundamentals": {
                 "available": False,
                 "note": message,
-                "data_source": fetched.get("data_source", "unavailable"),
             },
             "conversation_log": [
                 {"agent": "fundamentals_analyst", "message": message}
@@ -116,12 +115,8 @@ def run(crew_state):
             "series": computed["series"],
             "valuation": computed["valuation"],
             "red_flags": flags,
-            "unavailable": computed["unavailable"],
             "currency": currency,
-            "years": fetched["years"],
-            "period_end": fetched.get("period_end"),
             "data_note": data_note,
-            "data_source": fetched.get("data_source"),
             "interpretation": interpretation,
         },
         "conversation_log": [
