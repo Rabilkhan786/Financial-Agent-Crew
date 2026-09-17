@@ -18,13 +18,7 @@ def fetch_news(ticker, limit=None):
         raw_items = yf.Ticker(ticker).news or []
     except Exception as error:
         log.error("News fetch failed for %s: %s", ticker, error)
-        return {
-            "articles": [],
-            "source": "Yahoo Finance",
-            "article_count": 0,
-            "data_source": "unavailable",
-            "error": f"Could not fetch news for {ticker}.",
-        }
+        return []
 
     articles = []
     for item in raw_items:
@@ -62,10 +56,4 @@ def fetch_news(ticker, limit=None):
         if len(articles) >= limit:
             break
 
-    return {
-        "articles": articles,
-        "source": "Yahoo Finance",
-        "article_count": len(articles),
-        "data_source": "live" if articles else "unavailable",
-        "error": None if articles else f"No recent news found for {ticker}.",
-    }
+    return articles
