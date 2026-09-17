@@ -35,8 +35,9 @@ Use only the supplied numbers. Do not calculate new values and do not give buy/s
 
 
 def run(crew_state):
-    """Fetch statements, calculate ratios, and explain them."""
+    """Fetch statements, calculate financial metrics, and explain them."""
     ticker = crew_state["ticker"]
+    profile = crew_state.get("profile") or {}
     fetched = statements.fetch_statements(ticker)
 
     if fetched["data"].empty:
@@ -45,7 +46,7 @@ def run(crew_state):
             "fundamentals": {
                 "available": False,
                 "note": message,
-                "data_source": "unavailable",
+                "data_source": fetched.get("data_source", "unavailable"),
             },
             "conversation_log": [
                 {"agent": "fundamentals_analyst", "message": message}
@@ -53,9 +54,7 @@ def run(crew_state):
             "errors": [message],
         }
 
-    profile = market_data.fetch_profile(ticker)
     statement_data = fetched["data"]
-
     history_start = (
         statement_data.index[0] - dt.timedelta(days=60)
     ).date().isoformat()
@@ -82,30 +81,24 @@ def run(crew_state):
         else:
             valuation_lines.append(f"- {label}: unavailable")
 
-    flags = computed["red_flags"]
-    flag_text = "\n".join(
-        f"- [{flag['severity']}] {flag['message']}"
-        for flag in flags
-    ) or "- none"
-
     revision = ""
     if crew_state.get("revision_target") == "fundamentals_analyst":
         revision = "Reviewer feedback: " + crew_state.get("revision_reason", "")
 
-    company = crew_state.get("company") or profile.get("name") or ticker
+    currency = profile.get("currency")
+    data_note = statements.describe_gaps(fetched)
+    flags = computed["red_flags"]
+
     interpretation = llm.ask(
         PROMPT.format(
-            company=company,
+            company=crew_state.get("company") or ticker,
             ticker=ticker,
-            currency=fetched.get("currency") or "unknown",
+            currency=currency or "unknown",
             years=fetched["years"],
-            facts=formatting.facts_block(
-                computed["latest"],
-                fetched.get("currency"),
-            ),
+            facts=formatting.facts_block(computed["latest"], currency),
             valuation="\n".join(valuation_lines),
-            flags=flag_text,
-            gaps=statements.describe_gaps(fetched),
+            flags=formatting.red_flags_block(flags),
+            gaps=data_note,
             revision=revision,
         )
     )
@@ -124,14 +117,13 @@ def run(crew_state):
             "valuation": computed["valuation"],
             "red_flags": flags,
             "unavailable": computed["unavailable"],
-            "currency": fetched.get("currency"),
+            "currency": currency,
             "years": fetched["years"],
             "period_end": fetched.get("period_end"),
-            "data_note": statements.describe_gaps(fetched),
+            "data_note": data_note,
             "data_source": fetched.get("data_source"),
             "interpretation": interpretation,
         },
-        "company": company,
         "conversation_log": [
             {"agent": "fundamentals_analyst", "message": message}
         ],
