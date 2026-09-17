@@ -16,8 +16,6 @@ def _sentiment_summary(posts):
     bullish = sum(post.get("sentiment") == "Bullish" for post in posts)
     bearish = sum(post.get("sentiment") == "Bearish" for post in posts)
 
-    if not posts:
-        return "insufficient data"
     if bullish == 0 and bearish == 0:
         return "Posts were found, but none had Bullish/Bearish tags."
 
@@ -28,7 +26,7 @@ def _sentiment_summary(posts):
 
 
 def fetch_social_posts(ticker, limit=None):
-    """Return post count and sentiment summary for one ticker."""
+    """Return the post count and sentiment summary for one ticker."""
     limit = limit or config.SOCIAL_LIMIT
     url = STOCKTWITS_URL.format(symbol=ticker.upper())
 
@@ -44,8 +42,6 @@ def fetch_social_posts(ticker, limit=None):
         return {
             "post_count": 0,
             "social_sentiment": "insufficient data",
-            "data_source": "unavailable",
-            "error": f"Could not fetch StockTwits posts for {ticker}.",
         }
 
     posts = []
@@ -62,6 +58,4 @@ def fetch_social_posts(ticker, limit=None):
     return {
         "post_count": len(posts),
         "social_sentiment": sentiment_text,
-        "data_source": "live" if posts else "unavailable",
-        "error": None,
     }
