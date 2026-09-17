@@ -12,10 +12,12 @@ from src.core import graph
 
 @pytest.fixture
 def client():
+    """Return a test client for the FastAPI app."""
     return TestClient(api.app)
 
 
 def fake_state(report="## Executive summary\nAll good."):
+    """Return a small workflow result used by API tests."""
     return {
         "ticker": "TEST",
         "company": "Test Company",
@@ -49,30 +51,9 @@ def test_health(client):
     assert "model" in response.json()
 
 
-def test_analyse_returns_json_safe_result(monkeypatch, client):
-    monkeypatch.setattr(graph, "run_crew", lambda *args: fake_state())
-    monkeypatch.setattr(api.report_pdf, "build_pdf", lambda state: "report.pdf")
-
-    response = client.post(
-        "/analyse",
-        json={
-            "ticker": "TEST",
-            "start_date": "2023-01-01",
-            "end_date": "2024-01-01",
-        },
-    )
-
-    assert response.status_code == 200
-    body = response.json()
-    assert body["ticker"] == "TEST"
-    assert body["fundamentals"]["metrics"]["net_margin"] is None
-    assert body["analysis"]["charts"]["price"] == "/charts/TEST_price.png"
-    assert body["pdf_url"] == "/report/TEST/pdf"
-
-
 def test_invalid_date_range_is_rejected(client):
     response = client.post(
-        "/analyse",
+        "/analyse/stream",
         json={
             "ticker": "TEST",
             "start_date": "2024-02-01",
@@ -82,7 +63,7 @@ def test_invalid_date_range_is_rejected(client):
     assert response.status_code == 422
 
 
-def test_stream_returns_progress_and_result(monkeypatch, client):
+def test_stream_returns_progress_and_json_safe_result(monkeypatch, client):
     state = fake_state()
 
     def fake_stream(*args):
@@ -101,12 +82,22 @@ def test_stream_returns_progress_and_result(monkeypatch, client):
         },
     )
 
-    events = [json.loads(line) for line in response.text.splitlines() if line]
+    events = [
+        json.loads(line)
+        for line in response.text.splitlines()
+        if line
+    ]
     assert [event["event"] for event in events] == [
         "progress",
         "progress",
         "result",
     ]
+
+    result = events[-1]["result"]
+    assert result["ticker"] == "TEST"
+    assert result["fundamentals"]["metrics"]["net_margin"] is None
+    assert result["analysis"]["charts"]["price"] == "/charts/TEST_price.png"
+    assert result["pdf_url"] == "/report/TEST/pdf"
 
 
 def test_missing_chart_is_404(client):
