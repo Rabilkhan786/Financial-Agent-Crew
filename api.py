@@ -30,17 +30,8 @@ class AnalysisRequest(BaseModel):
     end_date: dt.date
 
 
-def _dates(request):
-    if request.start_date > request.end_date:
-        raise HTTPException(
-            status_code=422,
-            detail="start_date must be on or before end_date",
-        )
-    return request.start_date.isoformat(), request.end_date.isoformat()
-
-
 def _result(state):
-    """Convert the final LangGraph state into an API response."""
+    """Convert the final workflow state into the API response shape."""
     pdf_url = None
     if state.get("report"):
         try:
@@ -63,7 +54,7 @@ def _result(state):
 
 @app.get("/health")
 def health():
-    """Return backend readiness."""
+    """Return backend configuration status."""
     missing = config.missing_required()
     return {
         "status": "ok" if not missing else "not configured",
@@ -73,24 +64,17 @@ def health():
     }
 
 
-@app.post("/analyse")
-def analyse(request: AnalysisRequest):
-    """Run the complete workflow and return the final result."""
-    start_date, end_date = _dates(request)
-
-    try:
-        state = graph.run_crew(request.ticker, start_date, end_date)
-    except Exception as error:
-        log.exception("Analysis failed for %s", request.ticker)
-        raise HTTPException(status_code=500, detail=str(error)) from error
-
-    return _result(state)
-
-
 @app.post("/analyse/stream")
 def analyse_stream(request: AnalysisRequest):
-    """Stream agent progress and then the final result."""
-    start_date, end_date = _dates(request)
+    """Stream agent progress followed by the final analysis result."""
+    if request.start_date > request.end_date:
+        raise HTTPException(
+            status_code=422,
+            detail="start_date must be on or before end_date",
+        )
+
+    start_date = request.start_date.isoformat()
+    end_date = request.end_date.isoformat()
 
     def events():
         shown = 0
@@ -150,7 +134,7 @@ def chart(filename: str):
 
 @app.get("/report/{ticker}/pdf")
 def report(ticker: str):
-    """Serve the generated PDF report."""
+    """Serve the generated PDF report for one ticker."""
     if pathlib.Path(ticker).name != ticker:
         raise HTTPException(status_code=400, detail="Invalid ticker")
 
