@@ -1,79 +1,90 @@
-"""Looks at the share price and draws the charts.
+"""Analyze stock-price performance and create charts."""
 
-The maths is done in tools/kpi.py — this file only explains the numbers.
-"""
-
-from src import charts, config, formatting, llm, state
+from src.components import config
+from src.components.logging import get_logger
+from src.core import llm
 from src.tools import kpi, market_data
+from src.utils import charts, formatting
 
-log = config.get_logger(__name__)
+log = get_logger(__name__)
 
-PROMPT = """You are explaining a share price to a private investor.
+PROMPT = """You are a data analyst.
 
 Company: {company} ({ticker})
 Period: {start} to {end}
-Benchmark index: {benchmark}
+Benchmark: {benchmark}
 
-These figures were calculated from real closing prices. Use them as given:
-
+Calculated price metrics:
 {facts}
 
 Trend: {trend}
-Against the index: {versus}
-Risk-free rate used for the Sharpe ratio: {risk_free}
+Benchmark comparison: {comparison}
 
-Write 2 short paragraphs in plain English:
-1. How did the share perform, and how bumpy was the ride?
-2. How does that compare with the index, and what does the trend say now?
-
-Rules:
-- Quote only the numbers above. Do not calculate anything new, and do not
-  widen a figure into a range.
-- Explain what a drawdown or a Sharpe ratio means in one short phrase.
-- Do not predict where the price goes next.
+Write two short paragraphs explaining performance, risk, trend, and benchmark comparison.
+Use only the supplied numbers. Do not predict future prices.
 """
 
 
 def run(crew_state):
-    """Fetch prices, compute the KPIs, draw the charts, then explain them."""
+    """Fetch prices, calculate KPIs, draw charts, and explain the results."""
     ticker = crew_state["ticker"]
-    log.info("data_analyst: starting %s", ticker)
-
     market = market_data.fetch_market_data(
-        ticker, crew_state.get("start_date"), crew_state.get("end_date"))
+        ticker,
+        crew_state.get("start_date"),
+        crew_state.get("end_date"),
+    )
 
     if market["prices"].empty:
-        message = market["error"] or f"No price data for {ticker}."
-        log.warning("data_analyst: %s", message)
+        message = market.get("error") or f"No price data available for {ticker}."
         return {
-            "analysis": {"available": False, "note": message,
-                        "data_source": market.get("data_source", "unavailable")},
-            "conversation_log": [state.note("data_analyst", message)],
+            "analysis": {
+                "available": False,
+                "note": message,
+                "data_source": "unavailable",
+            },
+            "conversation_log": [
+                {"agent": "data_analyst", "message": message}
+            ],
             "errors": [message],
         }
 
-    computed = kpi.compute_all(market["prices"], market["benchmark_prices"],
-                              risk_free_rate=config.RISK_FREE_RATE)
+    computed = kpi.compute_all(
+        market["prices"],
+        market["benchmark_prices"],
+        risk_free_rate=config.RISK_FREE_RATE,
+    )
 
-    drawn = charts.build_all(crew_state.get("fundamentals", {}),
-                             computed["series"], ticker)
+    chart_paths = charts.build_all(
+        crew_state.get("fundamentals", {}),
+        computed["series"],
+        ticker,
+    )
 
-    benchmark = computed["benchmark"]
-    interpretation = llm.ask(PROMPT.format(
-        company=crew_state.get("company") or ticker,
-        ticker=ticker,
-        start=crew_state.get("start_date"),
-        end=crew_state.get("end_date"),
-        benchmark=market["benchmark_symbol"],
-        facts=formatting.facts_block(computed["latest"]),
-        trend=computed["trend"],
-        versus=benchmark["verdict"] if benchmark else "no overlapping index data",
-        risk_free=f"{config.RISK_FREE_RATE:.1%}",
-    ))
+    benchmark = computed.get("benchmark")
+    comparison = (
+        benchmark.get("verdict")
+        if benchmark
+        else "Benchmark comparison unavailable."
+    )
 
-    summary = (f"Priced {len(market['prices'])} trading days against "
-               f"{market['benchmark_symbol']}. Drew {len(drawn)} charts.")
-    log.info("data_analyst: %s", summary)
+    interpretation = llm.ask(
+        PROMPT.format(
+            company=crew_state.get("company") or ticker,
+            ticker=ticker,
+            start=crew_state.get("start_date"),
+            end=crew_state.get("end_date"),
+            benchmark=market["benchmark_symbol"],
+            facts=formatting.facts_block(computed["latest"]),
+            trend=computed["trend"],
+            comparison=comparison,
+        )
+    )
+
+    message = (
+        f"Analyzed {len(market['prices'])} trading days against "
+        f"{market['benchmark_symbol']}."
+    )
+    log.info("%s: %s", ticker, message)
 
     return {
         "analysis": {
@@ -85,9 +96,11 @@ def run(crew_state):
             "risk_free_rate": config.RISK_FREE_RATE,
             "unavailable": computed["unavailable"],
             "price_series": computed["series"],
-            "charts": drawn,
-            "data_source": market.get("data_source", "unavailable"),
+            "charts": chart_paths,
+            "data_source": market.get("data_source"),
             "interpretation": interpretation,
         },
-        "conversation_log": [state.note("data_analyst", summary)],
+        "conversation_log": [
+            {"agent": "data_analyst", "message": message}
+        ],
     }
