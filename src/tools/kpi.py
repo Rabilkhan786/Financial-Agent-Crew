@@ -240,19 +240,9 @@ def compute_all(
         if moves is not None:
             series["daily_returns"] = moves
 
-    against_index = return_vs_benchmark(priced, benchmark_prices)
-
-    unavailable = sorted(
-        name for name, value in values.items() if value is None
-    )
-    if against_index is None:
-        unavailable.append("return_vs_benchmark")
-
     return {
         "latest": values,
         "series": series,
         "trend": trend["trend"],
-        "benchmark": against_index,
-        "risk_free_rate": risk_free_rate,
-        "unavailable": sorted(unavailable),
+        "benchmark": return_vs_benchmark(priced, benchmark_prices),
     }
