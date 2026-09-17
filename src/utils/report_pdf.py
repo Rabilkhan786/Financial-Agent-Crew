@@ -31,6 +31,7 @@ CHARTS_BY_SECTION = {
 
 
 def _clean(text):
+    """Replace characters unsupported by FPDF's built-in font."""
     text = str(text or "")
     for old, new in REPLACEMENTS.items():
         text = text.replace(old, new)
@@ -38,7 +39,7 @@ def _clean(text):
 
 
 def _sections(report):
-    """Split markdown headings into section text."""
+    """Split markdown level-two headings into ordered sections."""
     sections = []
     heading = None
     body = []
@@ -58,6 +59,7 @@ def _sections(report):
 
 
 def _write_text(pdf, text, size=10, bold=False):
+    """Write one text block using the report's standard formatting."""
     style = "B" if bold else ""
     pdf.set_font("Helvetica", style, size)
     pdf.set_x(pdf.l_margin)
