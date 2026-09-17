@@ -53,22 +53,13 @@ def build_graph():
 
 
 def stream_crew(ticker, start_date, end_date):
-    """Run the workflow and yield state after each completed node."""
+    """Run the workflow and yield the shared state after each node."""
     workflow = build_graph()
     initial_state = state.new_state(ticker, start_date, end_date)
-    settings = {"recursion_limit": config.RECURSION_LIMIT}
 
     log.info("Starting analysis for %s", ticker)
     yield from workflow.stream(
         initial_state,
-        config=settings,
+        config={"recursion_limit": config.RECURSION_LIMIT},
         stream_mode="values",
     )
-
-
-def run_crew(ticker, start_date, end_date):
-    """Run the workflow and return the final state."""
-    final_state = {}
-    for snapshot in stream_crew(ticker, start_date, end_date):
-        final_state = snapshot
-    return final_state
