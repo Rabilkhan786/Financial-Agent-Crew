@@ -371,6 +371,8 @@ ALL_RATIOS = {
     "return_on_equity": return_on_equity,
 }
 
+CHART_RATIOS = {"operating_margin", "net_margin", "debt_to_equity"}
+
 RAW_LINES = [
     REVENUE,
     OPERATING_INCOME,
@@ -403,7 +405,7 @@ def compute_all(
 
     for name, calculate in ALL_RATIOS.items():
         history = calculate(table)
-        if history is not None:
+        if history is not None and name in CHART_RATIOS:
             series[name] = history
         values[name] = latest(history)
 
