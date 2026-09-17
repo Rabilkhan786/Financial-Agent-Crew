@@ -1,4 +1,4 @@
-"""Formatting helpers shared by the UI, agents, and PDF."""
+"""Formatting helpers shared by the UI and agents."""
 
 PERCENT_METRICS = {
     "revenue_growth_yoy",
@@ -38,40 +38,108 @@ STATEMENT_SOURCE = "Yahoo Finance statements"
 PRICE_SOURCE = "Yahoo Finance closing prices"
 
 EVIDENCE = {
-    "revenue_growth_yoy": ("latest fiscal year", STATEMENT_SOURCE, "(revenue - prior revenue) / prior revenue"),
-    "revenue_cagr": ("latest 3 fiscal years", STATEMENT_SOURCE, "(latest / first) ** (1/3) - 1"),
-    "operating_margin": ("latest fiscal year", STATEMENT_SOURCE, "operating income / revenue"),
-    "net_margin": ("latest fiscal year", STATEMENT_SOURCE, "net income / revenue"),
-    "cash_conversion": ("latest fiscal year", STATEMENT_SOURCE, "operating cash flow / net income"),
-    "free_cash_flow": ("latest fiscal year", STATEMENT_SOURCE, "operating cash flow - capital expenditure"),
-    "debt_to_equity": ("latest fiscal year", STATEMENT_SOURCE, "total debt / total equity"),
-    "interest_coverage": ("latest fiscal year", STATEMENT_SOURCE, "EBIT / interest expense"),
-    "return_on_capital_employed": ("latest fiscal year", STATEMENT_SOURCE, "EBIT / capital employed"),
-    "return_on_equity": ("latest fiscal year", STATEMENT_SOURCE, "net income / total equity"),
-    "total_return": ("selected period", PRICE_SOURCE, "last close / first close - 1"),
-    "annualised_return": ("selected period", PRICE_SOURCE, "annualised total return"),
-    "volatility": ("selected period", PRICE_SOURCE, "standard deviation of daily returns, annualised"),
-    "max_drawdown": ("selected period", PRICE_SOURCE, "worst peak-to-trough fall"),
-    "sharpe_ratio": ("selected period", PRICE_SOURCE, "(annualised return - risk-free rate) / volatility"),
-    "ma_50": ("last 50 trading days", PRICE_SOURCE, "50-day rolling average"),
-    "ma_200": ("last 200 trading days", PRICE_SOURCE, "200-day rolling average"),
+    "revenue_growth_yoy": (
+        "latest fiscal year",
+        STATEMENT_SOURCE,
+        "(revenue - prior revenue) / prior revenue",
+    ),
+    "revenue_cagr": (
+        "latest 3 fiscal years",
+        STATEMENT_SOURCE,
+        "(latest revenue / revenue 3 years ago) ** (1/3) - 1",
+    ),
+    "operating_margin": (
+        "latest fiscal year",
+        STATEMENT_SOURCE,
+        "operating income / revenue",
+    ),
+    "net_margin": (
+        "latest fiscal year",
+        STATEMENT_SOURCE,
+        "net income / revenue",
+    ),
+    "cash_conversion": (
+        "latest fiscal year",
+        STATEMENT_SOURCE,
+        "operating cash flow / net income",
+    ),
+    "free_cash_flow": (
+        "latest fiscal year",
+        STATEMENT_SOURCE,
+        "operating cash flow - |capital expenditure|",
+    ),
+    "debt_to_equity": (
+        "latest fiscal year",
+        STATEMENT_SOURCE,
+        "total debt / total equity",
+    ),
+    "interest_coverage": (
+        "latest fiscal year",
+        STATEMENT_SOURCE,
+        "EBIT / |interest expense|",
+    ),
+    "return_on_capital_employed": (
+        "latest fiscal year",
+        STATEMENT_SOURCE,
+        "EBIT / (total assets - current liabilities)",
+    ),
+    "return_on_equity": (
+        "latest fiscal year",
+        STATEMENT_SOURCE,
+        "net income / total equity",
+    ),
+    "total_return": (
+        "selected period",
+        PRICE_SOURCE,
+        "last close / first close - 1",
+    ),
+    "annualised_return": (
+        "selected period",
+        PRICE_SOURCE,
+        "(last close / first close) ** (1 / years) - 1",
+    ),
+    "volatility": (
+        "selected period",
+        PRICE_SOURCE,
+        "daily return standard deviation * sqrt(252)",
+    ),
+    "max_drawdown": (
+        "selected period",
+        PRICE_SOURCE,
+        "minimum(close / running peak - 1)",
+    ),
+    "sharpe_ratio": (
+        "selected period",
+        PRICE_SOURCE,
+        "(annualised return - risk-free rate) / volatility",
+    ),
+    "ma_50": (
+        "last 50 trading days",
+        PRICE_SOURCE,
+        "50-day rolling average",
+    ),
+    "ma_200": (
+        "last 200 trading days",
+        PRICE_SOURCE,
+        "200-day rolling average",
+    ),
     "last_close": ("latest trading day", PRICE_SOURCE, "closing price"),
 }
 
 
 def label(name):
-    """Return a readable metric label."""
+    """Return a readable label for a metric name."""
     return LABELS.get(name, name.replace("_", " ").capitalize())
 
 
 def evidence_for(name):
-    """Return period, source, and formula for one metric."""
+    """Return the period, source, and formula for one metric."""
     period, source, formula = EVIDENCE.get(name, ("-", "-", "-"))
     return {"period": period, "source": source, "formula": formula}
 
 
 def money(value, currency=None):
-    """Format a money value for display."""
+    """Format a monetary value for display."""
     if value is None:
         return "unavailable"
 
@@ -84,7 +152,7 @@ def money(value, currency=None):
 
 
 def metric(name, value, currency=None):
-    """Format one metric value."""
+    """Format one calculated metric for display or a prompt."""
     if value is None:
         return "unavailable"
     if name in PERCENT_METRICS:
@@ -95,8 +163,18 @@ def metric(name, value, currency=None):
 
 
 def facts_block(metrics, currency=None):
-    """Convert calculated metrics into prompt-ready text."""
+    """Convert calculated metrics into prompt-ready bullet points."""
     return "\n".join(
         f"- {label(name)}: {metric(name, value, currency)}"
         for name, value in metrics.items()
+    )
+
+
+def red_flags_block(flags):
+    """Convert deterministic red flags into prompt-ready bullet points."""
+    if not flags:
+        return "- none"
+    return "\n".join(
+        f"- [{flag['severity']}] {flag['message']}"
+        for flag in flags
     )
