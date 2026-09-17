@@ -1,7 +1,6 @@
 .git
 .venv
 .env
-.cache
 output
 __pycache__
 *.pyc
