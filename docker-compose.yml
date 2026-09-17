@@ -1,11 +1,8 @@
-# Both halves of the project, from one image.
+# Run the FastAPI backend and Streamlit UI together.
 #
 #   docker compose up --build
-#   -> API   at http://localhost:8000  (docs at /docs)
-#   -> app   at http://localhost:8501
-#
-# Two containers, not two processes in one: if the API crashes, Docker
-# restarts just the API, not the whole UI.
+#   -> API at http://localhost:8000
+#   -> UI  at http://localhost:8501
 
 services:
   api:
@@ -15,7 +12,6 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      # Named volumes so charts, PDFs and the cache survive a restart.
       - output:/app/output
       - cache:/app/.cache
     healthcheck:
@@ -32,17 +28,15 @@ services:
     command: streamlit run app.py --server.port=8501 --server.address=0.0.0.0 --server.headless=true
     env_file: .env
     environment:
-      # API_URL: used by the Streamlit server itself, so it needs the
-      # in-network service name "api", not localhost.
+      # Streamlit uses this address for server-to-server API requests.
       - API_URL=http://api:8000
-      # API_PUBLIC_URL: used by the reader's browser to load chart images,
-      # so it needs a host-reachable address instead. See config.py.
+      # The browser uses this address to load generated chart images.
       - API_PUBLIC_URL=http://localhost:8000
     ports:
       - "8501:8501"
     depends_on:
       api:
-        condition: service_healthy   # wait for /health, not just container start
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:
