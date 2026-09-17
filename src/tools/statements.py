@@ -79,7 +79,7 @@ def _total_debt(frames):
 
 
 def fetch_statements(ticker, years=None):
-    """Return normalized annual statements used by the ratio calculations."""
+    """Return normalized annual statements used by ratio calculations."""
     years = years or config.STATEMENT_YEARS
 
     try:
@@ -101,7 +101,6 @@ def fetch_statements(ticker, years=None):
             "missing": list(FIELD_MAP),
             "years": 0,
             "period_end": None,
-            "data_source": "unavailable",
             "error": f"Could not fetch statements for {ticker}.",
         }
 
@@ -111,7 +110,6 @@ def fetch_statements(ticker, years=None):
             "missing": list(FIELD_MAP),
             "years": 0,
             "period_end": None,
-            "data_source": "unavailable",
             "error": f"No statement data found for {ticker}.",
         }
 
@@ -137,7 +135,6 @@ def fetch_statements(ticker, years=None):
         "missing": sorted(missing),
         "years": len(data),
         "period_end": data.index[-1].date().isoformat() if len(data) else None,
-        "data_source": "live" if not data.empty else "unavailable",
         "error": None if not data.empty else f"No usable statement rows for {ticker}.",
     }
 
