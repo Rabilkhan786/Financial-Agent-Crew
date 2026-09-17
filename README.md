@@ -1,358 +1,171 @@
 # Financial Research Agent Crew
 
-A simple multi-agent financial analysis project built with LangGraph, FastAPI, Streamlit, pandas, and NumPy.
+A simple multi-agent financial analysis project built with LangGraph, FastAPI, Streamlit, pandas, and Yahoo Finance.
 
-The user enters a stock ticker and date range. The application collects market data, calculates financial metrics in Python, gathers recent market context, and produces a structured company analysis report.
+The user enters a stock ticker and date range. The application collects company data, calculates financial metrics in Python, asks specialized agents to explain the results, and produces a final report with charts and a PDF.
 
-> Educational project only. It is not investment advice.
+> Educational project only. This is not investment advice.
 
-## Problem
-
-Company research usually requires checking several things separately:
-
-- financial statements,
-- profitability and growth,
-- debt and cash flow,
-- stock-price performance,
-- benchmark performance,
-- recent news,
-- retail-market discussion.
-
-This project combines those steps into one workflow.
-
-## Simple architecture
+## How the app works
 
 ```text
 User
-  |
-  v
+  ↓
 Streamlit UI
-  |
-  v
+  ↓
 FastAPI
-  |
-  v
+  ↓
 LangGraph
-  |
-  v
+  ↓
 Orchestrator
-  |
-  v
+  ↓
 Market Researcher
-  |
-  v
+  ↓
 Fundamentals Analyst
-  |
-  v
+  ↓
 Data Analyst
-  |
-  v
+  ↓
 Report Writer
-  |
-  v
+  ↓
 Orchestrator Review
-  |
-  v
-Final report + charts + PDF
+  ├── accept → END
+  ├── market issue → Market Researcher → ... → Review
+  └── fundamentals issue → Fundamentals Analyst → ... → Review
 ```
 
-The Streamlit app calls the FastAPI endpoints directly with `requests`. FastAPI starts the LangGraph workflow and returns progress and results to the UI.
-
-## Agents
-
-The project has five main agent modules.
-
-### 1. Orchestrator
-
-- validates the ticker,
-- starts the workflow,
-- reviews the final report,
-- sends work back for revision when required.
-
-### 2. Market Researcher
-
-- fetches recent news,
-- fetches retail-market discussion,
-- summarizes recent company context,
-- checks that model-written numbers come from fetched sources.
-
-### 3. Fundamentals Analyst
-
-- fetches financial statements,
-- calculates financial ratios,
-- detects rule-based financial red flags,
-- asks the LLM to explain already-calculated results.
-
-### 4. Data Analyst
-
-- fetches historical prices,
-- calculates return and risk metrics,
-- compares the stock with a benchmark,
-- creates charts.
-
-### 5. Report Writer
-
-- combines the completed findings,
-- writes the final structured report,
-- uses only supplied evidence and calculated values.
-
-The Orchestrator also has a review step. That review is part of the same orchestrator module, not a separate sixth agent.
-
-## LangGraph flow
-
-```text
-START
-  |
-  v
-Orchestrator
-  |
-  |-- invalid ticker --> END
-  |
-  v
-Market Researcher
-  |
-  v
-Fundamentals Analyst
-  |
-  v
-Data Analyst
-  |
-  v
-Report Writer
-  |
-  v
-Orchestrator Review
-  |
-  |-- accept --> END
-  |
-  |-- research issue --> Market Researcher
-  |
-  `-- fundamentals issue --> Fundamentals Analyst
-```
-
-LangGraph is useful here because the workflow needs shared state, conditional routing, and a controlled revision loop.
-
-## Main tool modules
-
-The `src/tools/` folder contains the main data and calculation helpers:
-
-- `market_data.py` - company profile and market data,
-- `news.py` - recent news,
-- `social.py` - retail-market discussion,
-- `statements.py` - financial statements,
-- `ratios.py` - financial ratios and red flags,
-- `kpi.py` - stock-price and risk metrics,
-- `sourcing.py` - checks number provenance in model output.
-
-## Important design decision
-
-Financial calculations are not done by the LLM.
-
-```text
-external data
-    |
-    v
-Python calculation
-    |
-    v
-structured facts
-    |
-    v
-LLM explanation
-```
-
-`ratios.py` and `kpi.py` use normal Python, pandas, and NumPy calculations. The LLM explains the results instead of inventing or calculating the financial numbers itself.
-
-This makes the important calculations deterministic and testable.
+Python performs the financial calculations. The LLM is used to explain the calculated values, summarize market context, write the report, and review the final output.
 
 ## Project structure
 
 ```text
 Financial-Agent-Crew/
-|-- api.py                 # FastAPI backend
-|-- app.py                 # Streamlit UI + direct API calls
-|-- Dockerfile
-|-- docker-compose.yml
-|-- requirements.txt
-|-- evals/
-|   `-- run_eval.py
-|-- src/
-|   |-- agents/
-|   |   |-- orchestrator.py
-|   |   |-- market_researcher.py
-|   |   |-- fundamentals_analyst.py
-|   |   |-- data_analyst.py
-|   |   `-- report_writer.py
-|   |-- tools/
-|   |   |-- market_data.py
-|   |   |-- news.py
-|   |   |-- social.py
-|   |   |-- statements.py
-|   |   |-- ratios.py
-|   |   |-- kpi.py
-|   |   `-- sourcing.py
-|   |-- graph.py
-|   |-- state.py
-|   |-- llm.py
-|   |-- config.py
-|   |-- charts.py
-|   |-- formatting.py
-|   |-- serialise.py
-|   `-- report_pdf.py
-|-- tests/
-`-- output/
+├── app.py
+├── api.py
+├── config.yaml
+├── .env.example
+├── src/
+│   ├── components/
+│   │   ├── config.py
+│   │   └── logging.py
+│   ├── core/
+│   │   ├── graph.py
+│   │   ├── state.py
+│   │   └── llm.py
+│   ├── agents/
+│   │   ├── orchestrator.py
+│   │   ├── market_researcher.py
+│   │   ├── fundamentals_analyst.py
+│   │   ├── data_analyst.py
+│   │   └── report_writer.py
+│   ├── tools/
+│   │   ├── market_data.py
+│   │   ├── statements.py
+│   │   ├── news.py
+│   │   ├── social.py
+│   │   ├── ratios.py
+│   │   └── kpi.py
+│   └── utils/
+│       ├── formatting.py
+│       ├── charts.py
+│       ├── serialization.py
+│       └── report_pdf.py
+├── tests/
+│   ├── test_api.py
+│   ├── test_graph.py
+│   ├── test_orchestrator.py
+│   ├── test_kpi.py
+│   └── test_ratios.py
+├── Dockerfile
+├── docker-compose.yml
+└── requirements.txt
+```
+
+## Agent responsibilities
+
+### Orchestrator
+
+Validates the ticker, starts the workflow, reviews the final report, and controls the revision loop.
+
+### Market Researcher
+
+Fetches Yahoo Finance news and StockTwits posts, then summarizes recent company context and retail sentiment.
+
+### Fundamentals Analyst
+
+Fetches annual financial statements and uses deterministic Python functions to calculate growth, margins, cash flow, debt, returns, valuation comparisons, and red flags.
+
+### Data Analyst
+
+Fetches price history and a benchmark index, then calculates return, volatility, maximum drawdown, Sharpe ratio, moving averages, and benchmark performance. It also creates the charts.
+
+### Report Writer
+
+Combines the findings from the other agents into one structured report. It does not calculate new financial values.
+
+## Why LangGraph
+
+The workflow is not only a straight chain. After the report is written, the orchestrator reviews it. If a market-context issue is found, LangGraph routes the workflow back to the Market Researcher. If a fundamentals issue is found, it routes back to the Fundamentals Analyst. The revision count is limited in `config.yaml` so the workflow cannot loop forever.
+
+## Configuration
+
+Normal project settings live in `config.yaml`.
+
+```yaml
+llm:
+  model: "openai/gpt-oss-120b"
+  temperature: 0.2
+  timeout: 180
+  max_tokens: 4096
+
+workflow:
+  max_revisions: 1
+  recursion_limit: 20
+```
+
+Secrets stay in `.env`.
+
+```text
+GROQ_API_KEY=your_key_here
+API_URL=http://localhost:8000
+API_PUBLIC_URL=http://localhost:8000
 ```
 
 ## Run locally
 
-### 1. Create an environment
+Create an environment and install the dependencies:
 
 ```bash
 uv venv
-```
-
-Windows:
-
-```bash
-.venv\Scripts\activate
-```
-
-macOS/Linux:
-
-```bash
-source .venv/bin/activate
-```
-
-### 2. Install dependencies
-
-```bash
 uv pip install -r requirements.txt
 ```
 
-### 3. Configure environment variables
-
-Create `.env` from `.env.example` and add the required model key:
-
-```env
-GROQ_API_KEY=your_key_here
-```
-
-Optional providers:
-
-```env
-FINNHUB_API_KEY=
-ALPHAVANTAGE_API_KEY=
-```
-
-### 4. Start FastAPI
+Start FastAPI:
 
 ```bash
 uvicorn api:app --reload --port 8000
 ```
 
-### 5. Start Streamlit
-
-In another terminal:
+Start Streamlit in another terminal:
 
 ```bash
 streamlit run app.py
 ```
 
-FastAPI docs:
+Open `http://localhost:8501`.
 
-```text
-http://localhost:8000/docs
-```
-
-Streamlit:
-
-```text
-http://localhost:8501
-```
-
-## Docker Compose
-
-To run the FastAPI and Streamlit services together:
+## Run with Docker
 
 ```bash
 docker compose up --build
 ```
 
-Docker Compose starts two containers:
+- Streamlit: `http://localhost:8501`
+- FastAPI: `http://localhost:8000`
 
-```text
-FastAPI     -> localhost:8000
-Streamlit   -> localhost:8501
-```
-
-Inside Docker, Streamlit reaches FastAPI using the service address `http://api:8000`.
-
-## API endpoints
-
-### Health check
-
-```text
-GET /health
-```
-
-### Run complete analysis
-
-```text
-POST /analyse
-```
-
-Example body:
-
-```json
-{
-  "ticker": "AAPL",
-  "start_date": "2023-01-01",
-  "end_date": "2026-01-01"
-}
-```
-
-### Stream progress
-
-```text
-POST /analyse/stream
-```
-
-The Streamlit app uses this endpoint so it can show agent progress while the workflow is running.
-
-### Generated files
-
-```text
-GET /charts/{filename}
-GET /report/{ticker}/pdf
-```
-
-## Testing
-
-Run the offline tests with:
+## Tests
 
 ```bash
-pytest tests/ -q
+pytest -q
 ```
 
-The tests focus on the important deterministic parts of the application, including:
-
-- financial ratios and red flags,
-- price KPIs,
-- report number provenance,
-- graph routing,
-- API validation,
-- caching,
-- serialization.
-
-## Tech stack
-
-- Python
-- LangGraph / LangChain
-- Groq
-- FastAPI
-- Streamlit
-- pandas / NumPy
-- yfinance
-- Matplotlib
-- Docker
-- pytest
+The tests focus on API behavior, LangGraph routing, the review loop, financial ratios, and price KPIs.
