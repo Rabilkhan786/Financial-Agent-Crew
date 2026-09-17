@@ -22,7 +22,10 @@ def test_invalid_ticker_stops_before_research(monkeypatch):
     monkeypatch.setattr(orchestrator, "run", fake_orchestrator)
     monkeypatch.setattr(market_researcher, "run", should_not_run)
 
-    result = graph.run_crew("BAD", "2023-01-01", "2024-01-01")
+    snapshots = list(
+        graph.stream_crew("BAD", "2023-01-01", "2024-01-01")
+    )
+    result = snapshots[-1]
 
     assert result["ticker_valid"] is False
     assert result["errors"] == ["invalid ticker"]
@@ -48,4 +51,4 @@ def test_valid_ticker_reaches_market_researcher(monkeypatch):
     monkeypatch.setattr(market_researcher, "run", fake_researcher)
 
     with pytest.raises(ReachedResearcher):
-        graph.run_crew("TEST", "2023-01-01", "2024-01-01")
+        list(graph.stream_crew("TEST", "2023-01-01", "2024-01-01"))
