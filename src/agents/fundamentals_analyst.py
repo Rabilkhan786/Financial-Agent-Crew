@@ -1,123 +1,120 @@
-"""Reads the financial statements and explains what the numbers mean.
-
-The maths is done in tools/ratios.py. This file only explains, it never
-calculates.
-"""
+"""Analyze company financial statements and explain the results."""
 
 import datetime as dt
 
-from src import config, formatting, llm, state
+from src.components.logging import get_logger
+from src.core import llm
 from src.tools import market_data, ratios, statements
+from src.utils import formatting
 
-log = config.get_logger(__name__)
+log = get_logger(__name__)
 
-PROMPT = """You are a fundamentals analyst writing for a private investor.
+PROMPT = """You are a fundamentals analyst.
 
 Company: {company} ({ticker})
-Reporting currency: {currency}
-Financial years covered: {years}
+Currency: {currency}
+Years available: {years}
 
-These figures were calculated from the audited statements. They are correct.
-Use them exactly as given and do not calculate any new numbers:
-
+Calculated metrics:
 {facts}
 
-Valuation against the company's own history:
+Valuation:
 {valuation}
 
-Automated checks flagged these issues:
+Red flags:
 {flags}
 
-Could not be calculated (the data provider does not report them):
-{unavailable}
+Missing data:
+{gaps}
 
 {revision}
 
-Write 4 short paragraphs, in plain English, no jargon:
-1. Growth - is revenue growing, and how fast?
-2. Profitability - are margins healthy, improving or slipping?
-3. Cash and balance sheet - does profit turn into cash, and is the debt safe?
-4. Valuation - is the share expensive or cheap against its own history?
-
-Rules:
-- Quote only the numbers listed above. Never invent or estimate a figure, and
-  never widen one into a range.
-- If something is listed as unavailable, say it is unavailable. Do not guess it.
-- Mention every flagged issue. Do not soften them.
-- No recommendation to buy or sell. That is not your job here.
+Write four short paragraphs covering growth, profitability, cash/debt, and valuation.
+Use only the supplied numbers. Do not calculate new values and do not give buy/sell advice.
 """
 
 
-def _valuation_text(valuation):
-    lines = []
-    for name in ("pe", "pb"):
-        result = valuation.get(name)
-        title = "P/E" if name == "pe" else "P/B"
-        if result is None:
-            lines.append(f"- {title}: not enough history to compare")
-        else:
-            lines.append(f"- {title}: {result['current']:.1f} today, "
-                         f"{result['median']:.1f} median, {result['verdict']}")
-    return "\n".join(lines)
-
-
 def run(crew_state):
-    """Fetch the statements, compute the ratios, then explain them."""
+    """Fetch statements, calculate ratios, and explain them."""
     ticker = crew_state["ticker"]
-    log.info("fundamentals_analyst: starting %s", ticker)
-
     fetched = statements.fetch_statements(ticker)
+
     if fetched["data"].empty:
-        message = fetched["error"] or f"No statement data available for {ticker}."
-        log.warning("fundamentals_analyst: %s", message)
+        message = fetched.get("error") or f"No statement data available for {ticker}."
         return {
-            "fundamentals": {"available": False, "note": message,
-                             "data_source": fetched.get("data_source", "unavailable")},
-            "conversation_log": [state.note("fundamentals_analyst", message)],
+            "fundamentals": {
+                "available": False,
+                "note": message,
+                "data_source": "unavailable",
+            },
+            "conversation_log": [
+                {"agent": "fundamentals_analyst", "message": message}
+            ],
             "errors": [message],
         }
 
     profile = market_data.fetch_profile(ticker)
-
-    # Prices need to reach back as far as the oldest statement, since each
-    # fiscal year end is paired with the closest price. Without a start date,
-    # yfinance only returns one month of history, which isn't enough.
     statement_data = fetched["data"]
-    history_start = (statement_data.index[0] - dt.timedelta(days=60)).date().isoformat()
+
+    history_start = (
+        statement_data.index[0] - dt.timedelta(days=60)
+    ).date().isoformat()
     prices = market_data.fetch_prices(ticker, history_start, None)
-    valuation_input = market_data.valuation_history(prices, statement_data)
+    valuation_history = market_data.valuation_history(prices, statement_data)
 
     computed = ratios.compute_all(
-        fetched["data"],
+        statement_data,
         pe_current=profile.get("trailing_pe"),
-        pe_history=valuation_input["pe_history"],
+        pe_history=valuation_history["pe_history"],
         pb_current=profile.get("price_to_book"),
-        pb_history=valuation_input["pb_history"],
+        pb_history=valuation_history["pb_history"],
     )
 
-    currency = fetched["currency"]
+    valuation_lines = []
+    for name in ("pe", "pb"):
+        value = computed["valuation"].get(name)
+        label = "P/E" if name == "pe" else "P/B"
+        if value:
+            valuation_lines.append(
+                f"- {label}: {value['current']:.1f} current, "
+                f"{value['median']:.1f} historical median, {value['verdict']}"
+            )
+        else:
+            valuation_lines.append(f"- {label}: unavailable")
+
     flags = computed["red_flags"]
+    flag_text = "\n".join(
+        f"- [{flag['severity']}] {flag['message']}"
+        for flag in flags
+    ) or "- none"
+
     revision = ""
     if crew_state.get("revision_target") == "fundamentals_analyst":
-        revision = ("The reviewer sent this back with a specific request. "
-                    f"Address it directly: {crew_state.get('revision_reason', '')}")
+        revision = "Reviewer feedback: " + crew_state.get("revision_reason", "")
 
-    interpretation = llm.ask(PROMPT.format(
-        company=crew_state.get("company") or profile.get("name") or ticker,
-        ticker=ticker,
-        currency=currency or "unknown",
-        years=fetched["years"],
-        facts=formatting.facts_block(computed["latest"], currency),
-        valuation=_valuation_text(computed["valuation"]),
-        flags="\n".join(f"- [{f['severity']}] {f['message']}" for f in flags) or "- none",
-        unavailable=", ".join(computed["unavailable"]) or "nothing - all metrics available",
-        revision=revision,
-    ))
+    company = crew_state.get("company") or profile.get("name") or ticker
+    interpretation = llm.ask(
+        PROMPT.format(
+            company=company,
+            ticker=ticker,
+            currency=fetched.get("currency") or "unknown",
+            years=fetched["years"],
+            facts=formatting.facts_block(
+                computed["latest"],
+                fetched.get("currency"),
+            ),
+            valuation="\n".join(valuation_lines),
+            flags=flag_text,
+            gaps=statements.describe_gaps(fetched),
+            revision=revision,
+        )
+    )
 
-    summary = (f"Read {fetched['years']} years of statements. "
-               f"{len(flags)} red flag(s). "
-               f"{len(computed['unavailable'])} metric(s) unavailable.")
-    log.info("fundamentals_analyst: %s", summary)
+    message = (
+        f"Analyzed {fetched['years']} years of statements and found "
+        f"{len(flags)} red flag(s)."
+    )
+    log.info("%s: %s", ticker, message)
 
     return {
         "fundamentals": {
@@ -127,13 +124,15 @@ def run(crew_state):
             "valuation": computed["valuation"],
             "red_flags": flags,
             "unavailable": computed["unavailable"],
-            "currency": currency,
+            "currency": fetched.get("currency"),
             "years": fetched["years"],
-            "period_end": fetched["period_end"],
+            "period_end": fetched.get("period_end"),
             "data_note": statements.describe_gaps(fetched),
-            "data_source": fetched.get("data_source", "unavailable"),
+            "data_source": fetched.get("data_source"),
             "interpretation": interpretation,
         },
-        "company": crew_state.get("company") or profile.get("name") or ticker,
-        "conversation_log": [state.note("fundamentals_analyst", summary)],
+        "company": company,
+        "conversation_log": [
+            {"agent": "fundamentals_analyst", "message": message}
+        ],
     }
