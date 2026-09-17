@@ -36,3 +36,13 @@ def ask(prompt):
     except Exception as error:
         log.error("LLM call failed: %s", error)
         return ""
+
+
+def ask_structured(prompt, schema):
+    """Return model output parsed into a Pydantic schema."""
+    try:
+        model = get_llm().with_structured_output(schema)
+        return model.invoke(prompt)
+    except Exception as error:
+        log.error("Structured LLM call failed: %s", error)
+        return None
