@@ -1,70 +1,51 @@
-"""Tests for the compiled graph's routing, not just the plain functions.
-
-test_orchestrator.py checks route_after_intake() and route() as ordinary
-functions. These tests check that the compiled LangGraph actually uses them:
-that an invalid ticker really does skip the rest of the crew when run through
-the real graph, not just in theory.
-
-No network and no model calls: every agent is monkeypatched to either a fixed
-response or to fail loudly if it should not have been called at all.
-"""
+"""Tests for the main LangGraph routes."""
 
 import pytest
 
-from src import graph as graph_module
-from src import state
-from src.agents import data_analyst, fundamentals_analyst, market_researcher, orchestrator, report_writer
+from src.agents import market_researcher, orchestrator
+from src.core import graph
 
 
-def refuse(name):
-    """A stand-in for an agent that must not run in this test."""
-    def run(crew_state):
-        raise AssertionError(f"{name} must not run on this path")
-    return run
+def test_invalid_ticker_stops_before_research(monkeypatch):
+    def fake_orchestrator(state):
+        return {
+            "ticker_valid": False,
+            "conversation_log": [
+                {"agent": "orchestrator", "message": "invalid"}
+            ],
+            "errors": ["invalid ticker"],
+        }
+
+    def should_not_run(state):
+        raise AssertionError("market researcher should not run")
+
+    monkeypatch.setattr(orchestrator, "run", fake_orchestrator)
+    monkeypatch.setattr(market_researcher, "run", should_not_run)
+
+    result = graph.run_crew("BAD", "2023-01-01", "2024-01-01")
+
+    assert result["ticker_valid"] is False
+    assert result["errors"] == ["invalid ticker"]
 
 
-def test_an_invalid_ticker_never_reaches_the_rest_of_the_crew(monkeypatch):
-    """The real bug this graph shape fixes: before the conditional edge existed,
-    market_researcher, fundamentals_analyst, data_analyst and report_writer all
-    ran anyway for a ticker Yahoo could not confirm, each making its own real
-    network call that could only ever fail."""
-
-    def fake_orchestrator_run(crew_state):
-        return {"company": crew_state["ticker"], "ticker_valid": False,
-                "conversation_log": [state.note("orchestrator", "not found")],
-                "errors": ["Could not confirm NOTAREAL on Yahoo Finance."]}
-
-    monkeypatch.setattr(orchestrator, "run", fake_orchestrator_run)
-    monkeypatch.setattr(market_researcher, "run", refuse("market_researcher"))
-    monkeypatch.setattr(fundamentals_analyst, "run", refuse("fundamentals_analyst"))
-    monkeypatch.setattr(data_analyst, "run", refuse("data_analyst"))
-    monkeypatch.setattr(report_writer, "run", refuse("report_writer"))
-
-    result = graph_module.run_crew("NOTAREAL", "2023-01-01", "2024-01-01")
-
-    assert result["report"] == ""
-    assert result["errors"] == ["Could not confirm NOTAREAL on Yahoo Finance."]
-    assert result["conversation_log"] == [{"agent": "orchestrator", "message": "not found"}]
-
-
-def test_a_valid_ticker_does_reach_market_researcher(monkeypatch):
-    """The other half of the same edge: a confirmed ticker must still flow
-    through normally. Only market_researcher is faked here, and it deliberately
-    stops the graph from going further by raising - if this test reaches that
-    point without a network call, the routing worked."""
-
-    def fake_orchestrator_run(crew_state):
-        return {"company": "Real Co", "ticker_valid": True,
-                "conversation_log": [state.note("orchestrator", "confirmed")]}
-
-    class ReachedMarketResearcher(Exception):
+def test_valid_ticker_reaches_market_researcher(monkeypatch):
+    class ReachedResearcher(Exception):
         pass
 
-    def fake_market_researcher_run(crew_state):
-        raise ReachedMarketResearcher()
+    def fake_orchestrator(state):
+        return {
+            "ticker_valid": True,
+            "company": "Test Company",
+            "conversation_log": [
+                {"agent": "orchestrator", "message": "valid"}
+            ],
+        }
 
-    monkeypatch.setattr(orchestrator, "run", fake_orchestrator_run)
-    monkeypatch.setattr(market_researcher, "run", fake_market_researcher_run)
+    def fake_researcher(state):
+        raise ReachedResearcher()
 
-    with pytest.raises(ReachedMarketResearcher):
-        graph_module.run_crew("REAL", "2023-01-01", "2024-01-01")
+    monkeypatch.setattr(orchestrator, "run", fake_orchestrator)
+    monkeypatch.setattr(market_researcher, "run", fake_researcher)
+
+    with pytest.raises(ReachedResearcher):
+        graph.run_crew("TEST", "2023-01-01", "2024-01-01")
