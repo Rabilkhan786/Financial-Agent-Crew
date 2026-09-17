@@ -1,24 +1,24 @@
-# Core agent crew
+# Agent workflow
 langgraph
-langchain-core
 langchain-groq
-pydantic          # orchestrator.py imports this directly for ReviewDecision
+pydantic
 
-# Data + maths (all arithmetic happens here, never in the LLM)
+# Data analysis
 pandas
 numpy
 yfinance
 
-# The API (runs the crew) and the Streamlit app that calls it over HTTP
+# API and UI
 fastapi
 uvicorn
 requests
+streamlit
 
 # Output
 matplotlib
 fpdf2
-streamlit
 
-# Config + tests
+# Configuration and tests
 python-dotenv
+pyyaml
 pytest
