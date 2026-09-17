@@ -35,9 +35,15 @@ def load(namespace, key, max_age_hours=DEFAULT_MAX_AGE_HOURS):
     try:
         with path.open("rb") as handle:
             return True, pickle.load(handle)
-    except Exception as error:
-        # A broken cache entry should behave like a miss, but it should not be
-        # invisible when debugging a run.
+    except (
+        OSError,
+        pickle.PickleError,
+        EOFError,
+        AttributeError,
+        ValueError,
+        TypeError,
+        ImportError,
+    ) as error:
         log.warning("could not read cache file %s: %s", path, error)
         return False, None
 
@@ -49,7 +55,7 @@ def save(namespace, key, value):
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("wb") as handle:
             pickle.dump(value, handle)
-    except Exception as error:
+    except (OSError, pickle.PickleError, TypeError, AttributeError) as error:
         log.warning("could not write cache file %s: %s", path, error)
 
 
@@ -76,6 +82,9 @@ def cached(
     try:
         fresh = producer()
     except Exception as error:
+        # Producers call external services that can raise provider-specific
+        # exceptions. Catching them here is intentional so stale data can be
+        # used; the original error is re-raised when there is no fallback.
         if use_stale_on_failure:
             stale_hit, stale_value = load(
                 namespace,
