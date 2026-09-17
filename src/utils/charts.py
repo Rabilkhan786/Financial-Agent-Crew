@@ -14,6 +14,7 @@ log = get_logger(__name__)
 
 
 def _save(figure, ticker, name):
+    """Save one chart and return its file path."""
     config.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     path = config.OUTPUT_DIR / f"{ticker.replace('.', '_')}_{name}.png"
     figure.tight_layout()
@@ -23,13 +24,15 @@ def _save(figure, ticker, name):
 
 
 def _years(series):
+    """Return readable year labels for a Series index."""
     return [
         str(item.year) if hasattr(item, "year") else str(item)
         for item in series.index
     ]
 
 
-def revenue_profit(series, ticker, currency):
+def _revenue_profit(series, ticker, currency):
+    """Create the revenue and net-profit chart."""
     revenue = series.get("revenue")
     profit = series.get("net_income")
     if revenue is None or profit is None:
@@ -59,7 +62,8 @@ def revenue_profit(series, ticker, currency):
     return _save(figure, ticker, "revenue_profit")
 
 
-def margins(series, ticker):
+def _margins(series, ticker):
+    """Create the operating- and net-margin trend chart."""
     operating = series.get("operating_margin")
     net = series.get("net_margin")
     if operating is None and net is None:
@@ -86,7 +90,8 @@ def margins(series, ticker):
     return _save(figure, ticker, "margins")
 
 
-def cash_profit(series, ticker, currency):
+def _cash_profit(series, ticker, currency):
+    """Create the operating-cash-flow versus net-profit chart."""
     cash = series.get("operating_cash_flow")
     profit = series.get("net_income")
     if cash is None or profit is None:
@@ -113,7 +118,8 @@ def cash_profit(series, ticker, currency):
     return _save(figure, ticker, "cash_vs_profit")
 
 
-def debt(series, ticker):
+def _debt(series, ticker):
+    """Create the debt-to-equity trend chart."""
     leverage = series.get("debt_to_equity")
     if leverage is None or leverage.dropna().empty:
         return None
@@ -129,7 +135,8 @@ def debt(series, ticker):
     return _save(figure, ticker, "debt")
 
 
-def price(series, ticker):
+def _price(series, ticker):
+    """Create the closing-price and moving-average chart."""
     close = series.get("close")
     if close is None or close.empty:
         return None
@@ -154,16 +161,16 @@ def price(series, ticker):
 
 
 def build_all(fundamentals, price_series, ticker):
-    """Create every chart that has enough data."""
+    """Create each chart that has enough source data."""
     series = fundamentals.get("series", {}) or {}
     currency = fundamentals.get("currency")
 
     output = {
-        "revenue_profit": revenue_profit(series, ticker, currency),
-        "margins": margins(series, ticker),
-        "cash_vs_profit": cash_profit(series, ticker, currency),
-        "debt": debt(series, ticker),
-        "price": price(price_series or {}, ticker),
+        "revenue_profit": _revenue_profit(series, ticker, currency),
+        "margins": _margins(series, ticker),
+        "cash_vs_profit": _cash_profit(series, ticker, currency),
+        "debt": _debt(series, ticker),
+        "price": _price(price_series or {}, ticker),
     }
 
     output = {name: path for name, path in output.items() if path}
