@@ -28,11 +28,9 @@ def _fetch_stocktwits(ticker, limit):
 
     posts = []
     for message in payload.get("messages", [])[:limit]:
-        sentiment = (
-            (message.get("entities") or {})
-            .get("sentiment", {})
-            .get("basic")
-        )
+        entities = message.get("entities") or {}
+        sentiment = (entities.get("sentiment") or {}).get("basic")
+
         posts.append(
             {
                 "text": (message.get("body") or "").strip(),
