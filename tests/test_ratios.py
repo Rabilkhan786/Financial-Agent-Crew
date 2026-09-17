@@ -103,20 +103,21 @@ def test_missing_columns_return_none_instead_of_guessing():
 
 
 def test_compute_all_returns_metrics_series_and_red_flags():
-    table = healthy_company()
-    result = ratios.compute_all(table)
+    result = ratios.compute_all(healthy_company())
 
     assert result["latest"]["revenue_growth_yoy"] == pytest.approx(0.10)
     assert result["latest"]["operating_margin"] == pytest.approx(0.20)
     assert "revenue" in result["series"]
     assert "operating_margin" in result["series"]
     assert result["red_flags"] == []
-    assert "pe_vs_median" in result["unavailable"]
+    assert result["valuation"]["pe"] is None
+    assert result["valuation"]["pb"] is None
 
 
 def test_compute_all_handles_empty_data():
     result = ratios.compute_all(pd.DataFrame())
+
     assert result["latest"] == {}
     assert result["series"] == {}
     assert result["red_flags"] == []
-    assert "revenue_cagr" in result["unavailable"]
+    assert result["valuation"] == {"pe": None, "pb": None}
