@@ -42,7 +42,7 @@ def fetch_prices(symbol, start=None, end=None):
 
 
 def fetch_profile(symbol):
-    """Return the company fields used by the agents."""
+    """Return the company fields required by the workflow."""
     try:
         info = yf.Ticker(symbol).info or {}
     except Exception as error:
@@ -108,7 +108,7 @@ def valuation_history(prices, statements):
 
 
 def fetch_market_data(ticker, start, end):
-    """Return stock prices and benchmark prices for the selected period."""
+    """Return stock and benchmark prices for the selected period."""
     prices = fetch_prices(ticker, start, end)
     benchmark_symbol = kpi.benchmark_for(ticker)
     benchmark_prices = fetch_prices(benchmark_symbol, start, end)
@@ -121,6 +121,5 @@ def fetch_market_data(ticker, start, end):
         "prices": prices,
         "benchmark_symbol": benchmark_symbol,
         "benchmark_prices": benchmark_prices,
-        "data_source": "live" if not prices.empty else "unavailable",
         "error": error,
     }
