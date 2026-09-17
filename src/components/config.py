@@ -14,16 +14,11 @@ load_dotenv(PROJECT_ROOT / ".env")
 with CONFIG_PATH.open("r", encoding="utf-8") as file:
     SETTINGS = yaml.safe_load(file) or {}
 
-
-def _section(name):
-    return SETTINGS.get(name, {})
-
-
-LLM = _section("llm")
-ANALYSIS = _section("analysis")
-WORKFLOW = _section("workflow")
-PATHS = _section("paths")
-LOGGING = _section("logging")
+LLM = SETTINGS.get("llm", {})
+ANALYSIS = SETTINGS.get("analysis", {})
+WORKFLOW = SETTINGS.get("workflow", {})
+PATHS = SETTINGS.get("paths", {})
+LOGGING = SETTINGS.get("logging", {})
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
 GROQ_MODEL = LLM.get("model", "openai/gpt-oss-120b")
@@ -50,3 +45,12 @@ LOG_LEVEL = str(LOGGING.get("level", "INFO")).upper()
 def missing_required():
     """Return required environment variables that are missing."""
     return [] if GROQ_API_KEY else ["GROQ_API_KEY"]
+
+
+def enabled_sources():
+    """Return the main services used by the project."""
+    return {
+        f"Groq ({GROQ_MODEL})": bool(GROQ_API_KEY),
+        "Yahoo Finance": True,
+        "StockTwits": True,
+    }
