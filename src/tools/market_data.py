@@ -12,7 +12,11 @@ VALUATION_LOOKBACK_DAYS = 40
 
 
 def _clean_index(series):
-    if isinstance(series.index, pd.DatetimeIndex) and series.index.tz is not None:
+    """Remove timezone information from a price index when needed."""
+    if (
+        isinstance(series.index, pd.DatetimeIndex)
+        and series.index.tz is not None
+    ):
         series = series.copy()
         series.index = series.index.tz_localize(None)
     return series
@@ -79,8 +83,14 @@ def valuation_history(prices, statements):
             continue
 
         market_value = float(price_window.iloc[-1]) * float(shares)
-        profit = statements.get(ratios.NET_INCOME, pd.Series()).get(period_end)
-        equity = statements.get(ratios.TOTAL_EQUITY, pd.Series()).get(period_end)
+
+        profit = None
+        if ratios.NET_INCOME in statements.columns:
+            profit = statements.at[period_end, ratios.NET_INCOME]
+
+        equity = None
+        if ratios.TOTAL_EQUITY in statements.columns:
+            equity = statements.at[period_end, ratios.TOTAL_EQUITY]
 
         if profit is not None and not pd.isna(profit) and profit > 0:
             pe_values[period_end] = market_value / float(profit)
@@ -88,8 +98,12 @@ def valuation_history(prices, statements):
             pb_values[period_end] = market_value / float(equity)
 
     return {
-        "pe_history": pd.Series(pe_values).sort_index() if pe_values else None,
-        "pb_history": pd.Series(pb_values).sort_index() if pb_values else None,
+        "pe_history": (
+            pd.Series(pe_values).sort_index() if pe_values else None
+        ),
+        "pb_history": (
+            pd.Series(pb_values).sort_index() if pb_values else None
+        ),
     }
 
 
