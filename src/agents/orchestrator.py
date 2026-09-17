@@ -83,6 +83,7 @@ def review(crew_state):
     if revision_count >= max_revisions:
         return {
             "revision_target": "",
+            "revision_reason": "",
             "conversation_log": [
                 {
                     "agent": "orchestrator_review",
@@ -122,6 +123,7 @@ def review(crew_state):
 
     return {
         "revision_target": "",
+        "revision_reason": "",
         "conversation_log": [
             {
                 "agent": "orchestrator_review",
