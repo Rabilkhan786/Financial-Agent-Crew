@@ -6,21 +6,9 @@ __pycache__/
 # Virtual environment
 .venv/
 
-# Secrets — real keys live here and must never be committed
+# Secrets
 .env
 
 # Generated reports and charts
 output/*
 !output/.gitkeep
-
-# Disk cache for yfinance / news / social responses
-.cache/
-
-# Claude Code
-.claude/
-CLAUDE.md
-claude.md
-
-# Build instructions
-build.md
-BUILD.md
