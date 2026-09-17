@@ -1,8 +1,4 @@
-"""Fetches financial statements from Yahoo Finance and renames the columns
-so ratios.py can use them.
-
-If Yahoo does not have a number, it is marked missing, never guessed.
-"""
+"""Fetch and normalize annual financial statements from Yahoo Finance."""
 
 import pandas as pd
 import yfinance as yf
@@ -15,34 +11,46 @@ log = config.get_logger(__name__)
 CACHE_MAX_AGE_HOURS = config.CACHE_HOURS_STATEMENTS
 DEFAULT_YEARS = config.STATEMENT_YEARS
 
-# Canonical column -> Yahoo row names to try, in order. Several alternatives
-# per field because Yahoo labels the same thing differently across companies.
 FIELD_MAP = {
     ratios.REVENUE: ["Total Revenue", "Operating Revenue"],
     ratios.OPERATING_INCOME: ["Operating Income", "Total Operating Income As Reported"],
-    ratios.NET_INCOME: ["Net Income", "Net Income Common Stockholders",
-                        "Net Income From Continuing Operation Net Minority Interest"],
+    ratios.NET_INCOME: [
+        "Net Income",
+        "Net Income Common Stockholders",
+        "Net Income From Continuing Operation Net Minority Interest",
+    ],
     ratios.EBIT: ["EBIT"],
-    ratios.INTEREST_EXPENSE: ["Interest Expense", "Interest Expense Non Operating",
-                              "Total Other Finance Cost"],
-    ratios.OPERATING_CASH_FLOW: ["Operating Cash Flow",
-                                 "Cash Flow From Continuing Operating Activities"],
+    ratios.INTEREST_EXPENSE: [
+        "Interest Expense",
+        "Interest Expense Non Operating",
+        "Total Other Finance Cost",
+    ],
+    ratios.OPERATING_CASH_FLOW: [
+        "Operating Cash Flow",
+        "Cash Flow From Continuing Operating Activities",
+    ],
     ratios.CAPEX: ["Capital Expenditure", "Capital Expenditure Reported", "Purchase Of PPE"],
     ratios.TOTAL_DEBT: ["Total Debt"],
-    ratios.TOTAL_EQUITY: ["Stockholders Equity", "Common Stock Equity",
-                          "Total Equity Gross Minority Interest"],
+    ratios.TOTAL_EQUITY: [
+        "Stockholders Equity",
+        "Common Stock Equity",
+        "Total Equity Gross Minority Interest",
+    ],
     ratios.TOTAL_ASSETS: ["Total Assets"],
     ratios.CURRENT_LIABILITIES: ["Current Liabilities", "Total Current Liabilities"],
-    "shares_outstanding": ["Ordinary Shares Number", "Share Issued",
-                           "Diluted Average Shares", "Basic Average Shares"],
+    "shares_outstanding": [
+        "Ordinary Shares Number",
+        "Share Issued",
+        "Diluted Average Shares",
+        "Basic Average Shares",
+    ],
 }
 
-# Used only when "Total Debt" is absent: debt is the sum of its long and short parts.
 DEBT_PARTS = ["Long Term Debt", "Current Debt"]
 
 
 def _row(frames, candidates):
-    """The first matching row from whichever statement contains it."""
+    """Return the first usable matching row from the supplied statements."""
     for frame in frames:
         if frame is None or frame.empty:
             continue
@@ -55,15 +63,12 @@ def _row(frames, candidates):
 
 
 def _rebuild_total_debt(frames):
-    """Add up the debt components when Yahoo gives no single total.
-
-    This is arithmetic on figures Yahoo did report, not an estimate of a figure
-    it did not — which is why it is allowed under the no-inference rule.
-    """
+    """Add reported debt components when Yahoo has no single total-debt row."""
     parts = [_row(frames, [name]) for name in DEBT_PARTS]
     present = [part for part in parts if part is not None]
     if not present:
         return None
+
     total = present[0]
     for part in present[1:]:
         total = total.add(part, fill_value=0)
@@ -71,12 +76,14 @@ def _rebuild_total_debt(frames):
 
 
 def _fetch_raw(ticker):
-    """The three annual statements plus the profile, straight from Yahoo."""
+    """Fetch the three annual statements plus company profile information."""
     handle = yf.Ticker(ticker)
     try:
         info = handle.info or {}
-    except Exception:
+    except Exception as error:
+        log.warning("could not fetch profile data with statements for %s: %s", ticker, error)
         info = {}
+
     return {
         "income": handle.income_stmt,
         "balance": handle.balance_sheet,
@@ -86,33 +93,47 @@ def _fetch_raw(ticker):
 
 
 def fetch_statements(ticker, years=DEFAULT_YEARS, use_cache=True):
-    """Annual statements for one company, shaped for `ratios.compute_all`.
-
-    Returns the tidy DataFrame (one row per fiscal year, oldest first), the list
-    of canonical fields Yahoo had nothing for, and the reporting currency. Never
-    raises: a total failure comes back as an empty frame with an error message.
-    """
+    """Return annual statements shaped for ``ratios.compute_all``."""
     key = f"{ticker}:statements"
 
     try:
         if use_cache:
-            raw = cache.cached("statements", key, lambda: _fetch_raw(ticker),
-                               max_age_hours=CACHE_MAX_AGE_HOURS)
-            source = cache.freshness("statements", key)
+            raw, source = cache.cached(
+                "statements",
+                key,
+                lambda: _fetch_raw(ticker),
+                max_age_hours=CACHE_MAX_AGE_HOURS,
+            )
         else:
             raw = _fetch_raw(ticker)
             source = "live"
     except Exception as error:
-        return {"data": pd.DataFrame(), "missing": sorted(FIELD_MAP), "currency": None,
-                "years": 0, "period_end": None, "data_source": "unavailable",
-                "error": f"could not fetch statements for {ticker}: {error}"}
+        return {
+            "data": pd.DataFrame(),
+            "missing": sorted(FIELD_MAP),
+            "currency": None,
+            "years": 0,
+            "period_end": None,
+            "data_source": "unavailable",
+            "error": f"could not fetch statements for {ticker}: {error}",
+        }
 
     frames = [raw.get("income"), raw.get("balance"), raw.get("cashflow")]
-    frames = [frame for frame in frames if isinstance(frame, pd.DataFrame) and not frame.empty]
+    frames = [
+        frame
+        for frame in frames
+        if isinstance(frame, pd.DataFrame) and not frame.empty
+    ]
     if not frames:
-        return {"data": pd.DataFrame(), "missing": sorted(FIELD_MAP), "currency": None,
-                "years": 0, "period_end": None, "data_source": source,
-                "error": f"Yahoo Finance returned no statement data for {ticker}"}
+        return {
+            "data": pd.DataFrame(),
+            "missing": sorted(FIELD_MAP),
+            "currency": None,
+            "years": 0,
+            "period_end": None,
+            "data_source": source,
+            "error": f"Yahoo Finance returned no statement data for {ticker}",
+        }
 
     columns: dict[str, pd.Series] = {}
     missing: list[str] = []
@@ -126,21 +147,34 @@ def fetch_statements(ticker, years=DEFAULT_YEARS, use_cache=True):
             columns[canonical] = values
 
     if not columns:
-        return {"data": pd.DataFrame(), "missing": sorted(FIELD_MAP), "currency": None,
-                "years": 0, "period_end": None, "data_source": source,
-                "error": f"no recognisable line items for {ticker}"}
+        return {
+            "data": pd.DataFrame(),
+            "missing": sorted(FIELD_MAP),
+            "currency": None,
+            "years": 0,
+            "period_end": None,
+            "data_source": source,
+            "error": f"no recognisable line items for {ticker}",
+        }
 
-    # Yahoo returns newest-first with one column per period; the maths layer
-    # wants one row per year, oldest first.
     data = pd.DataFrame(columns)
     data.index = pd.to_datetime(data.index, errors="coerce")
     data = data[data.index.notna()].sort_index().tail(years)
 
     if missing:
-        log.warning("%s: no data for %s - reported as unavailable, not estimated",
-                    ticker, ", ".join(missing))
-    log.info("%s: %d years of statements, %d of %d fields present (%s)",
-             ticker, len(data), len(columns), len(FIELD_MAP), source)
+        log.warning(
+            "%s: no data for %s - reported as unavailable, not estimated",
+            ticker,
+            ", ".join(missing),
+        )
+    log.info(
+        "%s: %d years of statements, %d of %d fields present (%s)",
+        ticker,
+        len(data),
+        len(columns),
+        len(FIELD_MAP),
+        source,
+    )
 
     info = raw.get("info") or {}
     return {
@@ -155,17 +189,21 @@ def fetch_statements(ticker, years=DEFAULT_YEARS, use_cache=True):
 
 
 def describe_gaps(result):
-    """One plain sentence about what could not be fetched.
-
-    Written here in Python so the report states the gap in fixed words rather
-    than leaving a model to decide how to phrase — or whether to mention — it.
-    """
+    """Return a short explanation of missing statement data."""
     if result.get("error"):
         return result["error"]
-    missing = [name for name in result.get("missing", []) if name != "shares_outstanding"]
+
+    missing = [
+        name
+        for name in result.get("missing", [])
+        if name != "shares_outstanding"
+    ]
     if not missing:
         return f"Full statement data available for {result.get('years', 0)} financial years."
+
     readable = ", ".join(name.replace("_", " ") for name in missing)
-    return (f"Statement data covers {result.get('years', 0)} financial years. "
-            f"Not reported by the data provider: {readable}. "
-            "Any ratio needing these is shown as unavailable rather than estimated.")
+    return (
+        f"Statement data covers {result.get('years', 0)} financial years. "
+        f"Not reported by the data provider: {readable}. "
+        "Any ratio needing these is shown as unavailable rather than estimated."
+    )
