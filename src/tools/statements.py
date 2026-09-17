@@ -100,7 +100,6 @@ def fetch_statements(ticker, years=None):
             "data": pd.DataFrame(),
             "missing": list(FIELD_MAP),
             "years": 0,
-            "period_end": None,
             "error": f"Could not fetch statements for {ticker}.",
         }
 
@@ -109,7 +108,6 @@ def fetch_statements(ticker, years=None):
             "data": pd.DataFrame(),
             "missing": list(FIELD_MAP),
             "years": 0,
-            "period_end": None,
             "error": f"No statement data found for {ticker}.",
         }
 
@@ -134,7 +132,6 @@ def fetch_statements(ticker, years=None):
         "data": data,
         "missing": sorted(missing),
         "years": len(data),
-        "period_end": data.index[-1].date().isoformat() if len(data) else None,
         "error": None if not data.empty else f"No usable statement rows for {ticker}.",
     }
 
