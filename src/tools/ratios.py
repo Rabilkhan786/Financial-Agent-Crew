@@ -395,31 +395,19 @@ def compute_all(
             "series": {},
             "valuation": {"pe": None, "pb": None},
             "red_flags": [],
-            "unavailable": sorted(
-                list(ALL_RATIOS)
-                + ["revenue_cagr", "pe_vs_median", "pb_vs_median"]
-            ),
         }
 
     table = table.sort_index()
     series = {}
     values = {}
-    unavailable = []
 
     for name, calculate in ALL_RATIOS.items():
         history = calculate(table)
         if history is not None:
             series[name] = history
+        values[name] = latest(history)
 
-        value = latest(history)
-        values[name] = value
-        if value is None:
-            unavailable.append(name)
-
-    growth = revenue_cagr(table)
-    values["revenue_cagr"] = growth
-    if growth is None:
-        unavailable.append("revenue_cagr")
+    values["revenue_cagr"] = revenue_cagr(table)
 
     for name in RAW_LINES:
         column = get_column(table, name)
@@ -430,14 +418,10 @@ def compute_all(
         "pe": valuation_vs_median(pe_current, pe_history),
         "pb": valuation_vs_median(pb_current, pb_history),
     }
-    for name, result in valuation.items():
-        if result is None:
-            unavailable.append(f"{name}_vs_median")
 
     return {
         "latest": values,
         "series": series,
         "valuation": valuation,
         "red_flags": red_flags(table),
-        "unavailable": sorted(unavailable),
     }
