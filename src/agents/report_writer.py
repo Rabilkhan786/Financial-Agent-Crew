@@ -1,57 +1,36 @@
-"""Write the final report from findings already stored in crew state.
+"""Write the final report from the completed agent findings."""
 
-This module does not calculate financial values itself.
-"""
+from src.components.logging import get_logger
+from src.core import llm
+from src.utils import formatting
 
-from src import config, formatting, llm, state
+log = get_logger(__name__)
 
-log = config.get_logger(__name__)
-
-STUB_REPORT_MARKER = (
-    "The report could not be written because the language model did not respond."
-)
-
-DISCLAIMER = (
-    "This report is informational analysis produced automatically from public "
-    "data. It is not investment advice, and it is not a recommendation to buy "
-    "or sell any security. Figures come from Yahoo Finance and may contain "
-    "errors. Always do your own research and speak to a licensed adviser "
-    "before investing."
-)
-
-PROMPT = """You are writing a fundamental analysis report for a private investor.
+PROMPT = """Write a concise financial analysis report.
 
 Company: {company} ({ticker})
-Period reviewed: {start} to {end}
-Reporting currency: {currency}
+Period: {start} to {end}
 
-WHAT THE FUNDAMENTALS ANALYST FOUND
+Fundamentals analysis:
 {fundamentals}
 
-WHAT THE MARKET RESEARCHER FOUND
+Market research:
 {research}
 
-WHAT THE DATA ANALYST FOUND
+Price analysis:
 {analysis}
 
-THE NUMBERS (already calculated - use exactly these)
-{facts}
+Calculated fundamental metrics:
+{fundamental_facts}
 
-PRICE NUMBERS (already calculated - use exactly these)
+Calculated price metrics:
 {price_facts}
 
-AUTOMATED RED FLAGS
+Red flags:
 {flags}
 
-DATA GAPS
-{gaps}
-
-{conflicts}
-
-Write the report with exactly these headings, in this order:
-
+Use exactly these headings:
 ## Executive summary
-## Business quality
 ## Growth
 ## Profitability
 ## Cash generation
@@ -60,106 +39,35 @@ Write the report with exactly these headings, in this order:
 ## Market context
 ## Recommendation
 
-Rules:
-- Use only the numbers given above, or numbers that appear in the news
-  headlines you were shown. Never invent, round differently, or estimate a
-  figure. If a number is not listed, do not state one.
-- Do not turn a single figure into a range. If a headline says profit rose 34%,
-  write 34%, not "34-45%".
-- Anything listed as a data gap must be described as unavailable.
-- Every red flag must appear in the report. Do not soften or skip one.
-- Under Recommendation, summarise the strongest positive factors, the main
-  risks, and what new evidence would change the assessment. Do not tell the
-  reader to buy, sell, hold, wait, or avoid the security.
-- Short paragraphs. Plain English. No jargon without a short explanation.
+Use only the supplied evidence and numbers. Do not invent values.
+Under Recommendation, summarize positives, risks, and what evidence could change the assessment.
+Do not tell the reader to buy, sell, or hold the stock.
 """
 
-
-def facts_from(crew_state):
-    """Return calculated fundamental metrics as text the model may quote."""
-    fundamentals = crew_state.get("fundamentals", {})
-    if not fundamentals.get("available"):
-        return "No statement data was available for this company."
-    return formatting.facts_block(
-        fundamentals.get("metrics", {}),
-        fundamentals.get("currency"),
-    )
-
-
-def price_facts_from(crew_state):
-    """Return calculated price metrics as text the model may quote."""
-    analysis = crew_state.get("analysis", {})
-    if not analysis.get("available"):
-        return "No price data was available for this company."
-
-    lines = [formatting.facts_block(analysis.get("kpis", {}))]
-    lines.append(f"- Trend: {analysis.get('trend')}")
-    against_index = analysis.get("benchmark")
-    if against_index:
-        lines.append(
-            f"- Against {analysis.get('benchmark_symbol')}: "
-            f"{against_index['verdict']}"
-        )
-    return "\n".join(lines)
-
-
-def flags_from(crew_state):
-    """Return red flags exactly as the deterministic rules produced them."""
-    fundamentals = crew_state.get("fundamentals", {})
-    flags = fundamentals.get("red_flags", [])
-    if not flags:
-        return "None. No automated check was triggered."
-    return "\n".join(
-        f"- [{flag['severity']}] {flag['message']}"
-        for flag in flags
-    )
-
-
-def gaps_from(crew_state):
-    """Describe missing data so the report cannot silently fill the gaps."""
-    fundamentals = crew_state.get("fundamentals", {})
-    parts = []
-
-    if fundamentals.get("data_note"):
-        parts.append(fundamentals["data_note"])
-    if fundamentals.get("unavailable"):
-        parts.append(
-            "Ratios that could not be calculated: "
-            + ", ".join(fundamentals["unavailable"])
-        )
-
-    analysis = crew_state.get("analysis", {})
-    if analysis.get("unavailable"):
-        parts.append(
-            "Price measures that could not be calculated: "
-            + ", ".join(analysis["unavailable"])
-        )
-
-    research = crew_state.get("research", {})
-    if research.get("social_sentiment") == "insufficient data":
-        parts.append(
-            "Retail chatter: insufficient data (too few posts to judge)."
-        )
-
-    return "\n".join(parts) or "None."
+DISCLAIMER = (
+    "This report is generated from public data for educational purposes only. "
+    "It is not investment advice."
+)
 
 
 def run(crew_state):
-    """Write the report from existing agent outputs."""
+    """Combine agent outputs into one final report."""
     ticker = crew_state["ticker"]
-    log.info("report_writer: starting %s", ticker)
+    fundamentals = crew_state.get("fundamentals") or {}
+    research = crew_state.get("research") or {}
+    analysis = crew_state.get("analysis") or {}
 
-    fundamentals = crew_state.get("fundamentals", {})
-    research = crew_state.get("research", {})
-    analysis = crew_state.get("analysis", {})
+    fundamental_facts = formatting.facts_block(
+        fundamentals.get("metrics") or {},
+        fundamentals.get("currency"),
+    )
+    price_facts = formatting.facts_block(analysis.get("kpis") or {})
 
-    conflicts = ""
-    if crew_state.get("conflicts"):
-        recent = crew_state["conflicts"][-3:]
-        conflicts = (
-            "THE REVIEWER RAISED THESE POINTS - you must address each one:\n"
-            + "\n".join(f"- {item[:400]}" for item in recent)
-        )
+    flags = fundamentals.get("red_flags") or []
+    flag_text = "\n".join(
+        f"- [{flag['severity']}] {flag['message']}"
+        for flag in flags
+    ) or "- none"
 
     body = llm.ask(
         PROMPT.format(
@@ -167,54 +75,34 @@ def run(crew_state):
             ticker=ticker,
             start=crew_state.get("start_date"),
             end=crew_state.get("end_date"),
-            currency=fundamentals.get("currency") or "unknown",
-            fundamentals=(
-                fundamentals.get("interpretation") or "not available"
-            )[:2000],
-            research=(research.get("summary") or "not available")[:1200],
-            analysis=(analysis.get("interpretation") or "not available")[:1200],
-            facts=facts_from(crew_state),
-            price_facts=price_facts_from(crew_state),
-            flags=flags_from(crew_state),
-            gaps=gaps_from(crew_state),
-            conflicts=conflicts,
+            fundamentals=fundamentals.get("interpretation") or "not available",
+            research=research.get("summary") or "not available",
+            analysis=analysis.get("interpretation") or "not available",
+            fundamental_facts=fundamental_facts or "- unavailable",
+            price_facts=price_facts or "- unavailable",
+            flags=flag_text,
         )
     )
 
     if not body:
-        body = (
-            f"## Executive summary\n\n{STUB_REPORT_MARKER} The calculated "
-            "figures below are still correct and can be read directly."
-        )
+        body = "## Executive summary\n\nThe language model did not return a report."
 
-    report = "\n".join(
-        [
-            f"# {crew_state.get('company') or ticker} ({ticker})",
-            (
-                f"Fundamental analysis - {crew_state.get('start_date')} to "
-                f"{crew_state.get('end_date')}"
-            ),
-            "",
-            body,
-            "",
-            "## Red flags",
-            flags_from(crew_state),
-            "",
-            "## Data notes",
-            gaps_from(crew_state),
-            "",
-            "---",
-            DISCLAIMER,
-        ]
+    report = (
+        f"# {crew_state.get('company') or ticker} ({ticker})\n\n"
+        f"{body}\n\n"
+        "## Red flags\n"
+        f"{flag_text}\n\n"
+        "## Data notes\n"
+        f"{fundamentals.get('data_note') or 'No additional data notes.'}\n\n"
+        f"---\n{DISCLAIMER}"
     )
 
-    log.info("report_writer: wrote %d characters", len(report))
+    message = f"Wrote the final report ({len(report)} characters)."
+    log.info("%s: %s", ticker, message)
+
     return {
         "report": report,
         "conversation_log": [
-            state.note(
-                "report_writer",
-                f"Wrote the report ({len(report)} characters).",
-            )
+            {"agent": "report_writer", "message": message}
         ],
     }
