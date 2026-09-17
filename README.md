@@ -1,551 +1,446 @@
-# Financial Research Agent
+# Financial Research Agent Crew
 
-Type a stock ticker into a Streamlit app. Five agents research the company and
-produce a fundamental analysis report, shown in the app and downloadable as a PDF.
+A multi-agent financial research project built with LangGraph, FastAPI, and Streamlit.
 
-**This is informational analysis, not investment advice.** Every report carries
-that disclaimer as fixed text.
+The application takes a stock ticker and date range, collects public market data,
+calculates financial metrics in Python, gathers recent market context, and produces
+a structured company analysis report.
 
-The project runs as two processes: a **FastAPI service** that owns the agent
-crew, and a **Streamlit app** that is a pure HTTP client of it.
+The project is designed so that **financial calculations are deterministic**. The
+LLM explains already-calculated values; it does not calculate the ratios itself.
 
+> This project is for informational and educational use. It is not investment advice.
+
+## What problem does it solve?
+
+Researching a company usually means checking several different things:
+
+- financial statements,
+- profitability and growth,
+- debt and cash flow,
+- share-price performance,
+- benchmark performance,
+- recent news,
+- retail-market discussion.
+
+This project combines those steps into one workflow and keeps a record of what each
+agent did.
+
+## Main workflow
+
+```text
+User enters ticker + date range
+            |
+            v
+       Streamlit app
+            |
+            v
+        FastAPI API
+            |
+            v
+      LangGraph workflow
+            |
+            v
+       Orchestrator
+     validates ticker
+            |
+            v
+    Market Researcher
+   news + social context
+            |
+            v
+  Fundamentals Analyst
+ statements + ratios + flags
+            |
+            v
+       Data Analyst
+ price KPIs + benchmark + charts
+            |
+            v
+       Report Writer
+ combines existing findings
+            |
+            v
+    Orchestrator Review
+ deterministic checks + review
+            |
+       accept / revise
+            |
+            v
+   Report + charts + PDF
 ```
-Streamlit (app.py)  ──HTTP──>  FastAPI (api.py)  ──>  LangGraph crew
-   the front end                 the only thing          agents, Groq,
-   no model, no data             that runs anything      Yahoo, pandas
+
+The reviewer can send work back to the fundamentals analyst or market researcher.
+The revision count is capped so the graph cannot loop forever.
+
+## Agent responsibilities
+
+### Orchestrator
+
+Validates the ticker, records the company name, starts the workflow, and reviews the
+finished report.
+
+Before using an LLM for contradiction review, it performs deterministic checks:
+
+- required red flags must be represented in the report,
+- report numbers must trace back to calculated values or fetched article text,
+- revision count must stay within the configured limit.
+
+### Market researcher
+
+Collects recent news and StockTwits posts. Finnhub and Alpha Vantage are optional;
+Yahoo Finance remains the default news fallback.
+
+When there are too few social posts, the result is `insufficient data` instead of
+trying to infer sentiment from a tiny sample.
+
+### Fundamentals analyst
+
+Fetches annual statements and calculates financial metrics through
+`src/tools/ratios.py`.
+
+Examples include:
+
+- revenue growth and revenue CAGR,
+- operating and net margin,
+- cash conversion,
+- free cash flow,
+- debt to equity,
+- interest coverage,
+- ROE and ROCE,
+- P/E and P/B compared with the company's own history.
+
+It also produces deterministic red flags for conditions such as weak cash conversion,
+high leverage, margin erosion, negative equity, or falling revenue.
+
+### Data analyst
+
+Fetches historical prices, selects an appropriate benchmark, calculates price KPIs,
+and generates charts.
+
+Examples include:
+
+- total and annualised return,
+- volatility,
+- maximum drawdown,
+- Sharpe ratio,
+- 50-day and 200-day moving averages,
+- return versus the benchmark index.
+
+### Report writer
+
+Combines the findings already stored in the shared state. It is instructed to use
+only supplied evidence and calculated values.
+
+The final section summarises positive evidence, risks, and what new information could
+change the assessment. It does not tell the user to buy, sell, hold, wait, or avoid a
+security.
+
+## Why LangGraph?
+
+A simple chain would work if every step only moved forward. This project needs one
+controlled loop: after the report is written, the reviewer may send work back to an
+earlier agent and then review the new report again.
+
+That conditional revision edge is the main reason LangGraph is useful here.
+
+## Deterministic finance logic
+
+The LLM is not used for calculations.
+
+`src/tools/ratios.py` contains statement-based finance calculations and red-flag
+rules. `src/tools/kpi.py` contains price and risk calculations. Both are plain
+pandas/numpy code and can be tested independently.
+
+This separation makes the project easier to explain:
+
+```text
+external data -> Python calculation -> structured facts -> LLM explanation
 ```
 
-`app.py` imports no agent, no model and no data tool — only `api_client.py`,
-`config.py` and the shared formatting helpers. That boundary is what lets the
-API be restarted, moved to another machine or called by something other than
-Streamlit without touching the front end.
+If a required value is missing or unusable, the calculation returns `None` and the
+report describes the metric as unavailable rather than inventing a value.
 
----
+## Number provenance check
 
-## What it does
+`src/tools/sourcing.py` checks numbers written in the report against values the
+application is allowed to use.
 
+Allowed numbers can come from:
+
+- calculated financial metrics,
+- calculated price KPIs,
+- historical statement series,
+- benchmark comparisons,
+- deterministic social/news sentiment counts,
+- numbers present in fetched article titles or summaries.
+
+If the report contains an unsupported number, the reviewer can send the report back
+for correction.
+
+## Cache behaviour
+
+External data is cached under `.cache/`.
+
+`cache.cached()` returns both the value and its source:
+
+- `live` — fetched successfully during the current request,
+- `cached` — reused from a fresh cache entry or stale fallback,
+- `unavailable` — assigned by the caller when no usable data could be obtained.
+
+If an external provider fails and an older cached value exists, the application can
+reuse that stale value instead of failing the whole analysis.
+
+The Streamlit UI displays the source status so the user can distinguish live data
+from reused data.
+
+## Project structure
+
+```text
+Financial-Agent-Crew/
+├── api.py                    # FastAPI endpoints
+├── app.py                    # Streamlit UI
+├── docker-compose.yml
+├── Dockerfile
+├── requirements.txt
+├── evals/
+│   └── run_eval.py           # multi-company evaluation script
+├── src/
+│   ├── agents/
+│   │   ├── orchestrator.py
+│   │   ├── market_researcher.py
+│   │   ├── fundamentals_analyst.py
+│   │   ├── data_analyst.py
+│   │   └── report_writer.py
+│   ├── tools/
+│   │   ├── statements.py
+│   │   ├── ratios.py
+│   │   ├── market_data.py
+│   │   ├── kpi.py
+│   │   ├── news.py
+│   │   ├── social.py
+│   │   └── sourcing.py
+│   ├── api_client.py
+│   ├── cache.py
+│   ├── charts.py
+│   ├── config.py
+│   ├── formatting.py
+│   ├── graph.py
+│   ├── llm.py
+│   ├── report_pdf.py
+│   ├── serialise.py
+│   └── state.py
+├── tests/
+└── output/
 ```
-START -> orchestrator -> ticker confirmed? --no--> END (clean error, no further calls)
-                       |
-                      yes
-                       v
-                market_researcher -> fundamentals_analyst -> data_analyst
-                                                                    |
-                                                                    v
-                                                            report_writer
-                                                                    |
-                                                                    v
-                                                          orchestrator_review
-                                                          |-> fundamentals_analyst (revise)
-                                                          |-> market_researcher   (revise)
-                                                          |-> END
+
+## Setup
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/Rabilkhan786/Financial-Agent-Crew.git
+cd Financial-Agent-Crew
 ```
 
-| Agent | Job |
-|---|---|
-| `orchestrator` | Confirms the ticker is real, names the company, sets the plan |
-| `market_researcher` | News headlines and retail chatter, and what the mood is |
-| `fundamentals_analyst` | Reads the statements and explains the ratios |
-| `data_analyst` | Price performance, risk, and the five charts |
-| `report_writer` | Writes the report from what is already in the state |
-| `orchestrator_review` | Looks for contradictions and sends work back if needed |
+### 2. Create a virtual environment
 
-A ticker Yahoo cannot confirm is routed straight to `END` from `orchestrator`
-— `market_researcher`, `fundamentals_analyst`, `data_analyst` and
-`report_writer` never run, so an invalid ticker costs one profile lookup, not
-five agents' worth of wasted network calls.
+Using `uv`:
 
----
+```bash
+uv venv
+```
 
-## Running it
+Activate it on Windows:
 
-You need Python 3.11+ and [uv](https://docs.astral.sh/uv/).
+```bash
+.venv\Scripts\activate
+```
+
+Activate it on macOS/Linux:
+
+```bash
+source .venv/bin/activate
+```
+
+### 3. Install dependencies
 
 ```bash
 uv pip install -r requirements.txt
-cp .env.example .env        # then put your Groq key in it
 ```
 
-Two processes, in two terminals. The API first — the app is useless without it:
+### 4. Configure environment variables
 
-```bash
-uv run --no-project uvicorn api:app --port 8000    # terminal 1: the crew
-uv run --no-project streamlit run app.py           # terminal 2: the front end
+Copy `.env.example` to `.env` and add your Groq key:
+
+```env
+GROQ_API_KEY=your_key_here
 ```
 
-The app shows the API's status in its sidebar and says how to start it if it
-cannot connect, so a forgotten terminal 1 gives a plain message rather than a
-traceback.
+Optional integrations:
 
-The API is useful on its own — interactive docs at `http://localhost:8000/docs`,
-generated from the endpoint signatures:
+```env
+FINNHUB_API_KEY=
+ALPHAVANTAGE_API_KEY=
+```
 
-| Endpoint | What it does |
-|---|---|
-| `GET /health` | Is it up, which model, which sources are configured |
-| `POST /analyse` | Run the crew, get the whole result as JSON |
-| `POST /analyse/stream` | The same run as newline-delimited JSON, one line per agent |
-| `GET /charts/{filename}` | The PNGs the data analyst drew |
-| `GET /report/{ticker}/pdf` | The finished report as a PDF |
+Yahoo Finance and StockTwits do not require keys in this project.
 
-With Docker — both halves, one command:
+## Run locally
+
+Start the API:
 
 ```bash
-# Builds the image (first run only; cached after) and starts both containers.
-# Leave this running - it stays attached and streams both containers' logs.
+uvicorn api:app --reload --port 8000
+```
+
+In another terminal, start Streamlit:
+
+```bash
+streamlit run app.py
+```
+
+Then open the Streamlit address shown in the terminal.
+
+FastAPI documentation is available at:
+
+```text
+http://localhost:8000/docs
+```
+
+## Run with Docker
+
+```bash
 docker compose up --build
 ```
 
-That starts two containers from one image: the API on `http://localhost:8000`
-and the app on `http://localhost:8501`. The app waits for the API's `/health`
-to answer before it starts, so the first page load never shows "could not
-reach the API".
+The default compose configuration exposes:
 
-One image because both halves share the same code and dependencies. Two
-*containers* because a container should run one process — if the API falls
-over, Docker restarts the API rather than taking the UI down with it, and the
-two have separate logs.
-
-Inside the compose network the app reaches the API as `http://api:8000` -
-`API_URL`, set in `docker-compose.yml` as an `environment` entry so it
-overrides the host-side value in `.env`. Chart images use a **second**
-address, `API_PUBLIC_URL=http://localhost:8000`: those load in the reader's
-*browser*, not on the app's server, and the browser has never heard of a host
-named `api` - only `docker-compose.yml`'s own comment on this, and the
-matching one on `API_PUBLIC_URL` in `config.py`, explain why two addresses
-are needed instead of one. Charts, PDFs and the disk cache live in named
-volumes, so a restart does not lose a report or re-fetch everything from
-Yahoo. Keys are read from `.env` at run time and never baked into the image
-(`.dockerignore` excludes it).
-
-To run just one half:
-
-```bash
-# Step 1: build the image. Only needs repeating when requirements.txt or the
-# source changes - Docker reuses the cached layers otherwise.
-docker build -t crew .
-
-# Step 2: run it as the API (the image's default command, so nothing after
-# `crew` is needed). --env-file hands in the keys at run time; they are
-# never baked into the image itself.
-docker run --env-file .env -p 8000:8000 crew
+```text
+API:        http://localhost:8000
+Streamlit:  http://localhost:8501
 ```
 
-Running the Streamlit half by itself this way needs two extra flags for the
-two addresses above — see the longer comment in the `Dockerfile` next to its
-`CMD` line for the exact command, and why compose is the easier path.
+The API and Streamlit app run in separate containers so each process has one clear
+responsibility.
 
-**Verification status:** `docker compose up --build` has been run end to
-end — both containers came up healthy, and `/health` on the API and the app's
-port both responded. A real bug was caught before that run: chart images
-would have silently broken in the two-container setup, because the one
-`API_URL` it used was also handed to the browser, which cannot resolve
-`api` as a hostname. Fixed with the `API_PUBLIC_URL` split described above,
-and covered by `tests/test_api_client.py`.
+## API endpoints
 
-Tests and the eval:
+### Health
 
-```bash
-uv run --no-project python -m pytest tests/ -q          # fast: offline, no key needed
-uv run --no-project python -m pytest tests/ -q --live    # adds 20 tests that call Groq and Yahoo
-uv run --no-project python -m evals.run_eval             # all 10 companies
-uv run --no-project python -m evals.run_eval AAPL MSFT   # or just a subset
+```text
+GET /health
 ```
 
-The fast suite is 182 tests and runs in a few seconds with no network and no
-`GROQ_API_KEY`. `conftest.py` skips anything marked `@pytest.mark.live` unless
-`--live` is passed, so a fresh clone can run the whole fast suite immediately.
+Returns model configuration and enabled data sources.
 
----
+### Run an analysis
 
-## Keys
-
-Only one is required.
-
-| Key | Needed? | What it gives you |
-|---|---|---|
-| `GROQ_API_KEY` | **yes** | The model every agent uses. Free |
-| — | — | Yahoo Finance needs no key: prices, statements, news |
-| — | — | StockTwits needs no key: retail sentiment |
-| `FINNHUB_API_KEY` | no | Better news than Yahoo headlines (US listings on the free plan) |
-| `ALPHAVANTAGE_API_KEY` | no | A sentiment score per article |
-
-Missing optional keys switch features off; they never stop a run. The sidebar
-shows which sources are live.
-
-### Choosing a model
-
-`GROQ_MODEL` in `.env`. The default is `openai/gpt-oss-120b`.
-
-**Which models a key can reach varies by account.** A replacement key had 13
-models and no llama at all, so a name that had worked the day before returned
-404 on every call. List the models for the key in hand rather than trusting a
-name:
-
-```bash
-curl -H "Authorization: Bearer $GROQ_API_KEY" -H "User-Agent: crew" \
-     https://api.groq.com/openai/v1/models
+```text
+POST /analyse
 ```
 
-`groq/compound` looks tempting at 70,000 tokens/minute against 8,000, but it is
-an agentic model that runs its own web searches. It is not used here: it would
-put numbers in front of the writer that the sourcing guard never saw.
+Example request:
 
----
+```json
+{
+  "ticker": "AAPL",
+  "start_date": "2023-01-01",
+  "end_date": "2026-01-01"
+}
+```
 
-## Design decisions
+The API validates the date format and rejects a start date that is after the end date.
 
-### The LLM never does arithmetic
+### Stream analysis progress
 
-Every number in the report is calculated in `src/tools/ratios.py` and
-`src/tools/kpi.py` using plain pandas and numpy. Those two files import nothing
-but numpy and pandas — no model, no network — and a **test parses their own
-import statements to prove it**, so a future edit that reaches for either fails
-the test suite instead of shipping.
+```text
+POST /analyse/stream
+```
 
-The model receives the finished numbers and is asked what they mean. That
-matters because a wrong figure in a financial report is worse than no figure,
-and arithmetic done in code can be re-checked with a calculator. `ratios.py`
-and `kpi.py` between them have 83 dedicated tests, and every one of those 83
-asserts a value worked out by hand first, not just checked against the code's
-own output.
+Returns newline-delimited JSON events for agent progress and the final result.
 
-### The front end holds nothing
+### Generated files
 
-`app.py` talks to `api.py` over HTTP and imports no agent, no model client and
-no data tool. Everything that needs a key, a network call or a pandas object
-lives behind the API.
+```text
+GET /charts/{filename}
+GET /report/{ticker}/pdf
+```
 
-The reason is not tidiness. A Streamlit script re-runs top to bottom on every
-widget interaction, so an in-process crew is re-entered by the UI framework
-itself; behind an API, a run is one request and a click is just a click. It
-also means the API key lives in one process rather than in the one serving a
-web page, the crew can be called by something that is not Streamlit (the eval
-already does, directly), and either half can be restarted or deployed without
-the other.
+The chart endpoint only serves generated PNG files from the output directory.
 
-Two things have to cross that boundary, and both are handled in
-`src/serialise.py` rather than left to chance: a pandas Series becomes a list
-of `{period, value}` records with ISO date strings (not epoch milliseconds
-needing a client-side guess at the unit), and NaN becomes `null` — Python
-writes bare `NaN` into JSON by default, which parses in Python and fails in a
-browser. A test asserts the whole converted state survives
-`json.dumps(..., allow_nan=False)`.
+## Testing
 
-Progress is streamed as newline-delimited JSON: one line per agent as it
-finishes, then a final line with the result. The app shows the crew working
-rather than a blank two-minute spinner, which is what the in-process version
-did before the split, so the change cost no UX.
+Fast tests are offline:
 
-### Red flags are rules, not opinions
+```bash
+pytest tests/ -q
+```
 
-Nine deterministic checks in `ratios.py`, with the thresholds as named
-constants at the top of the file where they can be argued with — cash
-conversion under 70% for three years running, debt to equity over 2.0,
-interest cover under 2x, and so on. Each flag quotes the numbers that set it
-off, so the writer states a figure it never had to work out.
+Live integration tests require network access and a configured model key:
 
-The reviewer then checks, in Python, that every flag actually appears in the
-report. A report that quietly drops a bad finding gets sent back.
+```bash
+pytest tests/ -q --live
+```
 
-### Invented numbers are rejected, not just noticed
+The test suite covers the important deterministic parts of the project, including:
 
-`src/tools/sourcing.py` is a numerical sourcing guard: deterministic, no LLM
-and no network, checking that every figure in the report traces back to
-either a calculation or a headline the crew actually fetched. Anything else the
-model brought from its own memory, and the reviewer sends the report back.
-This is a validation check on one report at a time, not a mathematical
-guarantee about the model's behaviour in general.
-
-This was written because it kept happening. In one run a real headline said
-Yes Bank profit "rose 34%" and the report turned it into "34-45%" - the 34 was
-sourced, the 45 was invented to make a tidy range. Elsewhere a price target of
-1,199 and a "$20 billion capital raise" appeared, neither in any fetched
-article. Telling the model not to do this in the prompt was not enough.
-
-The reviewer and the eval call the same function, so the eval measures the
-guard the app actually runs rather than a copy of it that can drift.
-
-### Why LangGraph and not a chain
-
-Because of one edge: `orchestrator_review` can send the work **back** to an
-earlier agent. A chain runs forwards only. The review is a conditional edge
-returning one of three strings — `fundamentals_analyst`, `market_researcher`,
-or accept — and that loop is the reason a graph is the right shape here.
-
-### Why the loop is capped
-
-Two agents can disagree forever. The review node checks
-`revision_count >= max_revisions` **at the top, before anything else**, and
-force-accepts the report when the cap is hit. Behind that, `recursion_limit=25`
-is passed as a run setting to `crew.stream(..., stream_mode="values")` (the
-same call `run_crew` and the Streamlit app both use) as a backstop in case the
-routing itself misbehaves. Both were tested directly: at the cap the reviewer
-accepts without even calling the model.
-
-The app's Agent log tab shows this happening rather than leaving it in the
-raw log text: each reviewer entry is marked "sending work back" or "accepted"
-based on where it falls in the log (an acceptance is always the *last* entry;
-a send-back is always followed by the agent it targeted), not by parsing the
-reviewer's wording, and a closing line states plainly whether the report was
-accepted on the first draft, after some revisions, or because the cap was hit.
-
-### Missing data is reported, never inferred
-
-Common for smaller listings and for companies that report unusual line items.
-Anything Yahoo does not report comes back
-as `None`, is named in an `unavailable` list, and is printed in the report as
-unavailable. Ratios with a zero or negative denominator are left blank rather
-than shown — return on equity when equity is negative looks like a real number
-but means nothing.
-
-### Social sentiment is counted, not guessed
-
-StockTwits posts carry a Bullish/Bearish tag the poster set themselves, so the
-mood is *counted* in Python. Below five posts the posts are **discarded** and
-`social_sentiment` is hardcoded to `"insufficient data"` before the model sees
-anything — a handful of anonymous posts is not a signal, and the surest way to
-stop a model reading meaning into noise is to not show it the noise.
-
-### Everything external is cached
-
-`src/cache.py` stores every fetch on disk, keyed by ticker and date. Re-running
-an analysis costs nothing. If a provider fails and a stale copy exists, the
-stale copy is used rather than killing the run.
-
-### Live, cached, or unavailable — shown, not hidden
-
-Every tab in the app carries a small caption saying whether that section's
-figures were fetched during this run, reused from an earlier one, or never
-arrived at all — `cache.freshness()` compares the cache file's age against a
-five-second "just fetched" window. A reader should not have to guess whether
-a red flag is based on this morning's numbers or last week's.
-
-### Every metric carries its own evidence
-
-The Fundamentals and Price & market tables show Period, Source and Formula
-next to every figure, from a small lookup in `formatting.py`
-(`EVIDENCE`/`evidence_for()`). Two tests guard it against drifting from the
-real calculations: one enumerates every key `ratios.ALL_RATIOS` actually
-produces, the other every key `kpi.compute_all()` does, and asserts each has
-a real entry — so a renamed or newly added ratio fails the test suite rather
-than silently showing a blank evidence row.
-
----
-
-## What it computes
-
-**From the statements** — revenue growth YoY and 3-year CAGR, operating margin,
-net margin, cash conversion (OCF ÷ net profit), free cash flow, debt to equity,
-interest coverage, ROCE, ROE, and P/E and P/B against the company's *own*
-5-year median.
-
-Comparing a company with itself sidesteps the argument about which rivals count
-as comparable. A negative multiple is reported as "not meaningful", not as cheap.
-
-**From the prices** — total return, CAGR, annualised volatility, max drawdown,
-Sharpe, the 50 and 200-day averages, and return against the right index. The
-benchmark is chosen from the ticker suffix (`.NS` → NIFTY, `.BO` → SENSEX,
-otherwise S&P 500), because beating "the market" only means something if it is
-the right market. Stock and index are trimmed to shared trading days before
-comparison. The project targets US listings; the suffix routing means a London
-or Indian ticker still works, it is simply not what the eval covers.
-
----
+- finance ratios and red flags,
+- price KPIs and benchmark logic,
+- report-number provenance,
+- graph routing and revision limits,
+- JSON serialisation,
+- API validation,
+- cache behaviour,
+- API-client URL handling.
 
 ## Evaluation
 
-`evals/run_eval.py` runs ten US companies and checks three things per report.
-Five are healthy (AAPL, MSFT, JNJ, KO, PG) and five are chosen to set off the
-red-flag rules — Boeing is heavily borrowed with thin interest cover, Ford and
-AT&T carry heavy debt, Intel burns cash, and Lumen manages negative equity,
-high leverage, thin interest cover and falling revenue all at once. An eval
-where nothing is ever flagged proves nothing:
+The repository also contains a multi-company evaluation script:
 
-1. **No blanks.** A NaN reaching the report means a calculation failed quietly.
-2. **No invented numbers.** Every figure in the report must trace back to a
-   calculated value. This is the check that proves the model is not doing maths.
-3. **All sections present.**
+```bash
+python -m evals.run_eval
+```
 
-Each company also gets one of four classifications: `PASS`, `FAIL`,
-`DATA_UNAVAILABLE` (Yahoo had nothing for the ticker), or `PROVIDER_LIMIT`
-(the model never answered — almost always the free tier's daily or per-minute
-token limit). The three checks above measure report quality; the
-classification keeps a provider outage from being reported as if it were a
-bug in the crew.
+It checks whether generated reports contain blank values, unsupported numbers, or
+missing required sections. Provider failures are classified separately from report
+quality failures so an unavailable external service is not automatically treated as
+a logic bug.
 
-Walgreens (`WBA`) used to be in the roster and was dropped: it was taken
-private, so Yahoo now has no data for it at all. That would show up as
-`DATA_UNAVAILABLE` — a real thing to know, but not a finding about the crew,
-which is exactly the distinction the classification exists to make.
+## Important design decisions
 
-### Results
+1. **Python calculates; the model explains.** Financial arithmetic and validation stay
+   deterministic and testable.
+2. **Missing data stays missing.** The project does not estimate unavailable statement
+   values just to complete a report.
+3. **The review loop is bounded.** `MAX_REVISIONS` prevents agents from revising
+   forever, with LangGraph's recursion limit as an additional guard.
+4. **External integrations degrade gracefully.** Optional providers can fail without
+   necessarily stopping the complete run.
+5. **The API is the execution boundary.** Streamlit does not run agents directly; it
+   communicates with FastAPI through `src/api_client.py`.
 
-Measured 2026-08-26 on Groq `openai/gpt-oss-120b`, run in two batches of five
-because of the daily token allowance.
+## Current limitations
 
-| Check | Result |
-|---|---|
-| No blanks (NaN) | **10 / 10** |
-| No unsourced numbers | **10 / 10** |
-| All sections present | **8 / 10** |
-
-| Ticker | Blanks | Numbers | Sections | Revisions |
-|---|---|---|---|---|
-| AAPL | pass | pass | pass | 0 |
-| MSFT | pass | pass | pass | 0 |
-| JNJ | pass | pass | pass | 0 |
-| KO | pass | pass | pass | 0 |
-| PG | pass | pass | pass | 0 |
-| F | pass | pass | pass | 0 |
-| T | pass | pass | pass | **1** |
-| INTC | pass | pass | pass | 0 |
-| BA | pass | pass | pass | 0 |
-| LUMN | pass | pass | pass | 0 |
-
-**The two failures were not report quality.** The free tier allows 200,000
-tokens a day. The daily quota ran out at 14:33 and those two companies were
-written at 14:28 and 14:32, so the writer got no answer and the report was
-printed with its calculated sections only. The same tickers pass on a fresh
-quota. It is a limit of the free plan, not of the crew, and it is left in the
-table rather than quietly re-run until it looked better.
-
-AT&T needed **one revision**: the reviewer rejected the first draft and sent the
-work back, which is the loop doing what it exists for on real data.
-
-### Why the guards matter
-
-The unsourced-number check earns its place. Before it existed these reached the
-reader: a `1,199` price target, a `$20 billion` capital raise, and a sourced
-"34% jump in profit" widened into an invented "34-45%" range. None of those
-figures appeared in any article the crew fetched.
-
-Prompting alone did not stop it. The prompts now name the failure explicitly and
-the guard still fires, which is the argument for having both.
-
-Getting a trustworthy number out of the check meant fixing five false positives
-first: dates in both ISO and prose form, thousands separators splitting
-`3,807.45` into two numbers, index names like `S&P 500`, the Alpha Vantage
-sentiment score, and the StockTwits tally (counted in Python, so
-`16 out of 30 posts` is a calculated figure). Reports also use narrow no-break
-spaces, which stopped the index names matching until the text was normalised. A
-noisy check hides the real findings.
-
-### Known limit: the free tier
-
-Two separate limits, and the second is the one that bites.
-
-**Tokens per minute** (8,000). `llm.py` paces calls with LangChain's
-`InMemoryRateLimiter` and keeps `.with_retry()` behind it.
-
-**Tokens per day** (200,000). One company costs roughly 15,000-20,000 tokens, so
-about ten to twelve companies fit in a day. A ten-company eval fits once; running
-it repeatedly does not. When the daily quota goes, the writer gets no answer and
-the report comes back with only its calculated sections - which looks exactly
-like a code fault and is not one. `GROQ_MODEL` can be pointed at another model,
-each of which has its own daily budget.
-
-Also worth knowing: a reasoning model can spend its whole output budget thinking
-and return an empty answer, which is why `MAX_OUTPUT_TOKENS` and
-`REQUEST_TIMEOUT` are set explicitly rather than left at their defaults.
-
----
-
-## Limitations
-
-Honest, not exhaustive:
-
-- **Free-tier limits, above.** The daily token cap is the one most likely to
-  bite during a portfolio demo — run one or two companies rather than the
-  full ten if the quota is uncertain.
-- **The disk cache stores pickled Python objects**, not JSON, because a cached
-  value can be a pandas DataFrame. `pickle.load` on untrusted input is a known
-  risk in general; here it is not one in practice, because nothing but this
-  app's own fetch functions ever writes to `.cache/`. It would matter if that
-  stopped being true.
-- **yfinance's `history()` call has an explicit timeout** (`market_data.py`,
-  `REQUEST_TIMEOUT = 20`); `.info`, the statements, and `.news` do not, because
-  yfinance exposes no timeout parameter on those and a custom `requests.Session`
-  was tried and rejected — it bypasses yfinance's own cookie/crumb handling and
-  gets rate-limited immediately, verified live. A hung connection on those
-  calls would still hang the agent that made it, and fixing that properly
-  means either a thread-based timeout wrapper or tracking yfinance's own
-  session internals, both bigger than this project's scope justifies without
-  an actual incident.
-- **US listings only, by design.** The `.NS`/`.BO`/`.L`/`.TO` benchmark
-  routing in `kpi.py` works for other exchanges and is unit tested, but the
-  eval roster, the README's examples, and the orchestrator's ticker-confirmed
-  message are all written with US tickers in mind.
-- **No demo screenshot in this README.** Verified live in a browser during
-  development (sidebar, invalid-ticker handling, the evidence table, all
-  checked against a real running instance), but capturing and committing an
-  actual image is a manual step, not something to fake with a placeholder.
-
----
+- The project depends heavily on Yahoo Finance data quality and field availability.
+- Some yfinance calls do not expose a reliable per-request timeout.
+- Optional news providers have their own free-tier limits and exchange restrictions.
+- Model-provider token/rate limits can prevent an interpretation or report from being
+  generated even when the deterministic calculations completed successfully.
+- The disk cache uses pickle because cached values include pandas objects. The cache
+  must therefore remain application-controlled and should not load files supplied by
+  untrusted users.
 
 ## Tech stack
 
-Everything here is in `requirements.txt` — nothing here is aspirational.
-
-**Agents and orchestration** — LangGraph, LangChain, Groq (`langchain-groq`),
-pydantic (structured reviewer output)
-**Data and maths** — pandas, numpy, yfinance
-**Optional data sources** — Finnhub, Alpha Vantage, StockTwits (all via plain
-`urllib`, no client SDK for any of them)
-**Output** — Streamlit, Matplotlib, fpdf2
-**Config and tests** — python-dotenv, pytest
-
----
-
-## Layout
-
-```
-docker-compose.yml         both halves: one image, two containers
-api.py                     the FastAPI service - the only thing that runs the crew
-app.py                     the Streamlit front end - a pure HTTP client of the API
-src/api_client.py          every HTTP call the app makes, in one place
-src/serialise.py           crew state -> JSON (pandas and NaN do not cross HTTP)
-src/config.py              the only file that reads .env, plus logging
-src/state.py               the shared TypedDict every agent reads and writes
-src/llm.py                 the only file that talks to Groq
-src/graph.py               the LangGraph wiring
-src/cache.py               disk cache for every external call
-src/charts.py              the five matplotlib charts
-src/report_pdf.py          the PDF export
-src/formatting.py          numbers to readable text
-src/agents/                the five agents plus the reviewer
-src/tools/ratios.py        fundamental maths (pure pandas/numpy, tested)
-src/tools/kpi.py           price maths (pure pandas/numpy, tested)
-src/tools/sourcing.py      numerical provenance guard (pure stdlib, tested)
-src/tools/statements.py    Yahoo line items to our column names
-src/tools/market_data.py   prices, benchmark, profile, valuation history
-src/tools/news.py          Yahoo / Finnhub / Alpha Vantage
-src/tools/social.py        StockTwits (keyless)
-tests/                     182 fast tests + 20 live tests (see Testing, below)
-evals/run_eval.py          ten companies, three checks, four-way classification
-output/                    reports, charts, logs (gitignored)
-```
-
----
-
-## Notes from building it
-
-Things found by running the code, not by reading docs:
-
-- **Which models a Groq key can reach varies by account.** A key that had 13
-  models and no llama at all returned 404 on a model name that worked fine on
-  a different key the day before. List the models for the key in hand.
-- **`.with_retry()` on a model removes `.with_structured_output()`** — calling
-  it on an already-retrying model raises, because the retry wrapper does not
-  carry that method through. The fix is to build the structured chain first
-  and put `.with_retry()` on the outside (`src/llm.py:ask_structured`).
-- **A reasoning model can spend its whole output budget thinking** and return
-  an empty answer, which reaches the reader as "the report could not be
-  written." `MAX_OUTPUT_TOKENS` and `REQUEST_TIMEOUT` are set explicitly
-  because of this.
-- Finnhub's free plan returns **403** for non-US tickers, so `news.py` falls back
-  to Yahoo on any error, not just on an empty result.
-- StockTwits returns 404/403 for tickers it has no page for, which is expected
-  and yields "insufficient data" rather than an error.
-- Yahoo's statement row labels are consistent across exchanges, so one field map
-  covers US listings and everything else alike.
+- Python
+- LangGraph / LangChain
+- Groq
+- FastAPI
+- Streamlit
+- pandas / NumPy
+- yfinance
+- Matplotlib
+- fpdf2
+- pytest
+- Docker
