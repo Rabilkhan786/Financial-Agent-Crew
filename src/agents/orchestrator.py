@@ -2,12 +2,9 @@
 
 from pydantic import BaseModel
 
-from src.components.logging import get_logger
 from src.core import llm
 from src.tools import market_data
 from src.utils import formatting
-
-log = get_logger(__name__)
 
 
 class ReviewDecision(BaseModel):
