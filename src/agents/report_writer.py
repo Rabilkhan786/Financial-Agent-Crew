@@ -1,19 +1,16 @@
-"""Writes the final report using what other agents already found.
+"""Write the final report from findings already stored in crew state.
 
-It does not calculate anything itself.
+This module does not calculate financial values itself.
 """
 
 from src import config, formatting, llm, state
 
 log = config.get_logger(__name__)
 
-# What the report says when the model doesn't answer at all - usually a free
-# tier token limit. Named here so evals/run_eval.py can tell this apart from
-# a real quality problem in the report.
-STUB_REPORT_MARKER = ("The report could not be written because the language "
-                      "model did not respond.")
+STUB_REPORT_MARKER = (
+    "The report could not be written because the language model did not respond."
+)
 
-# Always printed, word for word. Not something an agent decides to include.
 DISCLAIMER = (
     "This report is informational analysis produced automatically from public "
     "data. It is not investment advice, and it is not a recommendation to buy "
@@ -71,24 +68,26 @@ Rules:
   write 34%, not "34-45%".
 - Anything listed as a data gap must be described as unavailable.
 - Every red flag must appear in the report. Do not soften or skip one.
-- Under Recommendation, give a view (for example: worth a closer look, wait,
-  avoid for now) and say plainly what would change your mind. Do not give
-  price targets and do not tell the reader to buy or sell.
+- Under Recommendation, summarise the strongest positive factors, the main
+  risks, and what new evidence would change the assessment. Do not tell the
+  reader to buy, sell, hold, wait, or avoid the security.
 - Short paragraphs. Plain English. No jargon without a short explanation.
 """
 
 
 def facts_from(crew_state):
-    """The calculated fundamentals, as text the model can quote."""
+    """Return calculated fundamental metrics as text the model may quote."""
     fundamentals = crew_state.get("fundamentals", {})
     if not fundamentals.get("available"):
         return "No statement data was available for this company."
-    return formatting.facts_block(fundamentals.get("metrics", {}),
-                                  fundamentals.get("currency"))
+    return formatting.facts_block(
+        fundamentals.get("metrics", {}),
+        fundamentals.get("currency"),
+    )
 
 
 def price_facts_from(crew_state):
-    """The calculated price numbers, as text the model can quote."""
+    """Return calculated price metrics as text the model may quote."""
     analysis = crew_state.get("analysis", {})
     if not analysis.get("available"):
         return "No price data was available for this company."
@@ -97,41 +96,56 @@ def price_facts_from(crew_state):
     lines.append(f"- Trend: {analysis.get('trend')}")
     against_index = analysis.get("benchmark")
     if against_index:
-        lines.append(f"- Against {analysis.get('benchmark_symbol')}: "
-                     f"{against_index['verdict']}")
+        lines.append(
+            f"- Against {analysis.get('benchmark_symbol')}: "
+            f"{against_index['verdict']}"
+        )
     return "\n".join(lines)
 
 
 def flags_from(crew_state):
-    """The red flags, exactly as the rules wrote them."""
+    """Return red flags exactly as the deterministic rules produced them."""
     fundamentals = crew_state.get("fundamentals", {})
     flags = fundamentals.get("red_flags", [])
     if not flags:
         return "None. No automated check was triggered."
-    return "\n".join(f"- [{flag['severity']}] {flag['message']}" for flag in flags)
+    return "\n".join(
+        f"- [{flag['severity']}] {flag['message']}"
+        for flag in flags
+    )
 
 
 def gaps_from(crew_state):
-    """What could not be calculated, so the report can say so."""
+    """Describe missing data so the report cannot silently fill the gaps."""
     fundamentals = crew_state.get("fundamentals", {})
     parts = []
+
     if fundamentals.get("data_note"):
         parts.append(fundamentals["data_note"])
     if fundamentals.get("unavailable"):
-        parts.append("Ratios that could not be calculated: "
-                     + ", ".join(fundamentals["unavailable"]))
+        parts.append(
+            "Ratios that could not be calculated: "
+            + ", ".join(fundamentals["unavailable"])
+        )
+
     analysis = crew_state.get("analysis", {})
     if analysis.get("unavailable"):
-        parts.append("Price measures that could not be calculated: "
-                     + ", ".join(analysis["unavailable"]))
+        parts.append(
+            "Price measures that could not be calculated: "
+            + ", ".join(analysis["unavailable"])
+        )
+
     research = crew_state.get("research", {})
     if research.get("social_sentiment") == "insufficient data":
-        parts.append("Retail chatter: insufficient data (too few posts to judge).")
+        parts.append(
+            "Retail chatter: insufficient data (too few posts to judge)."
+        )
+
     return "\n".join(parts) or "None."
 
 
 def run(crew_state):
-    """Write the report from what is already in the state."""
+    """Write the report from existing agent outputs."""
     ticker = crew_state["ticker"]
     log.info("report_writer: starting %s", ticker)
 
@@ -141,58 +155,66 @@ def run(crew_state):
 
     conflicts = ""
     if crew_state.get("conflicts"):
-        # Only the last few, and only the reviewer's most recent thinking. This
-        # list grows with every revision, and the prompt has a ceiling.
         recent = crew_state["conflicts"][-3:]
-        conflicts = ("THE REVIEWER RAISED THESE POINTS - you must address each one:\n"
-                     + "\n".join(f"- {item[:400]}" for item in recent))
+        conflicts = (
+            "THE REVIEWER RAISED THESE POINTS - you must address each one:\n"
+            + "\n".join(f"- {item[:400]}" for item in recent)
+        )
 
-    # Every piece is capped. Pasting three agents' full write-ups plus the
-    # growing revision notes went over the provider's per-request token
-    # limit, and the writer produced nothing. The numbers stay short because
-    # they're already worked out - it's the prose that needs trimming.
-    body = llm.ask(PROMPT.format(
-        company=crew_state.get("company") or ticker,
-        ticker=ticker,
-        start=crew_state.get("start_date"),
-        end=crew_state.get("end_date"),
-        currency=fundamentals.get("currency") or "unknown",
-        fundamentals=(fundamentals.get("interpretation") or "not available")[:2000],
-        research=(research.get("summary") or "not available")[:1200],
-        analysis=(analysis.get("interpretation") or "not available")[:1200],
-        facts=facts_from(crew_state),
-        price_facts=price_facts_from(crew_state),
-        flags=flags_from(crew_state),
-        gaps=gaps_from(crew_state),
-        conflicts=conflicts,
-    ))
+    body = llm.ask(
+        PROMPT.format(
+            company=crew_state.get("company") or ticker,
+            ticker=ticker,
+            start=crew_state.get("start_date"),
+            end=crew_state.get("end_date"),
+            currency=fundamentals.get("currency") or "unknown",
+            fundamentals=(
+                fundamentals.get("interpretation") or "not available"
+            )[:2000],
+            research=(research.get("summary") or "not available")[:1200],
+            analysis=(analysis.get("interpretation") or "not available")[:1200],
+            facts=facts_from(crew_state),
+            price_facts=price_facts_from(crew_state),
+            flags=flags_from(crew_state),
+            gaps=gaps_from(crew_state),
+            conflicts=conflicts,
+        )
+    )
 
     if not body:
-        body = (f"## Executive summary\n\n{STUB_REPORT_MARKER} The calculated "
-                "figures below are still correct and can be read directly.")
+        body = (
+            f"## Executive summary\n\n{STUB_REPORT_MARKER} The calculated "
+            "figures below are still correct and can be read directly."
+        )
 
-    # The red flags and the disclaimer are added here as fixed text rather than
-    # left to the model, so they can never be dropped or reworded.
-    report = "\n".join([
-        f"# {crew_state.get('company') or ticker} ({ticker})",
-        f"Fundamental analysis - {crew_state.get('start_date')} to "
-        f"{crew_state.get('end_date')}",
-        "",
-        body,
-        "",
-        "## Red flags",
-        flags_from(crew_state),
-        "",
-        "## Data notes",
-        gaps_from(crew_state),
-        "",
-        "---",
-        DISCLAIMER,
-    ])
+    report = "\n".join(
+        [
+            f"# {crew_state.get('company') or ticker} ({ticker})",
+            (
+                f"Fundamental analysis - {crew_state.get('start_date')} to "
+                f"{crew_state.get('end_date')}"
+            ),
+            "",
+            body,
+            "",
+            "## Red flags",
+            flags_from(crew_state),
+            "",
+            "## Data notes",
+            gaps_from(crew_state),
+            "",
+            "---",
+            DISCLAIMER,
+        ]
+    )
 
     log.info("report_writer: wrote %d characters", len(report))
     return {
         "report": report,
-        "conversation_log": [state.note("report_writer",
-                                        f"Wrote the report ({len(report)} characters).")],
+        "conversation_log": [
+            state.note(
+                "report_writer",
+                f"Wrote the report ({len(report)} characters).",
+            )
+        ],
     }
