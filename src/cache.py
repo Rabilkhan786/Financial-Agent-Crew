@@ -25,14 +25,14 @@ def _path_for(namespace, key):
 def load(namespace, key, max_age_hours=DEFAULT_MAX_AGE_HOURS):
     """Return ``(hit, value)`` for a fresh cache entry."""
     path = _path_for(namespace, key)
-    if not path.exists():
-        return False, None
-
-    age_hours = (time.time() - path.stat().st_mtime) / 3600
-    if age_hours > max_age_hours:
-        return False, None
-
     try:
+        if not path.exists():
+            return False, None
+
+        age_hours = (time.time() - path.stat().st_mtime) / 3600
+        if age_hours > max_age_hours:
+            return False, None
+
         with path.open("rb") as handle:
             return True, pickle.load(handle)
     except (
