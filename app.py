@@ -1,16 +1,24 @@
-"""Streamlit front end for the financial research crew.
+"""Streamlit UI for the financial research crew.
 
-The app only displays data. All agent work runs through the FastAPI service.
+The UI sends requests directly to the FastAPI service. Agent work stays in the
+backend and LangGraph workflow.
 """
 
 import datetime as dt
+import json
 
 import pandas as pd
+import requests
 import streamlit as st
 
-from src import api_client, config, formatting, serialise
+from src import config, formatting, serialise
 
 log = config.get_logger(__name__)
+
+API_URL = config.API_URL.rstrip("/")
+API_PUBLIC_URL = config.API_PUBLIC_URL.rstrip("/")
+QUICK_TIMEOUT = 15
+RUN_TIMEOUT = 900
 
 st.set_page_config(
     page_title="Financial Research Agent",
@@ -20,51 +28,9 @@ st.set_page_config(
 
 st.title("Financial Research Agent")
 st.caption(
-    "Five agents research a company and write a fundamental analysis report. "
+    "Five agents research a company and write a financial analysis report. "
     "Informational only - not investment advice."
 )
-
-
-with st.sidebar:
-    st.header("Company")
-    ticker = st.text_input(
-        "Ticker",
-        value="AAPL",
-        help=(
-            "A US listing, for example AAPL, MSFT or BA. "
-            "Other exchanges need a suffix, such as .L or .NS."
-        ),
-    )
-    today = dt.date.today()
-    start_date = st.date_input(
-        "From",
-        value=today - dt.timedelta(days=365 * 3),
-    )
-    end_date = st.date_input("To", value=today)
-    run_it = st.button("Run the crew", type="primary", use_container_width=True)
-
-    st.divider()
-    st.subheader("Backend")
-    st.caption(f"API: {config.API_URL}")
-
-    try:
-        service = api_client.health()
-        if service.get("missing_config"):
-            st.error(
-                "The API is up but not configured: "
-                + ", ".join(service["missing_config"])
-            )
-        else:
-            st.success(f"Connected - {service.get('model')}")
-
-        st.subheader("Data sources")
-        for name, switched_on in (service.get("sources") or {}).items():
-            st.write(("ON - " if switched_on else "off - ") + name)
-        api_reachable = True
-    except api_client.ApiError as error:
-        st.error(str(error))
-        st.caption("Start it with: uvicorn api:app --port 8000")
-        api_reachable = False
 
 
 def metrics_table(values, currency=None):
@@ -85,14 +51,14 @@ def metrics_table(values, currency=None):
 
 
 DATA_SOURCE_LABEL = {
-    "live": "🟢 live - fetched during this run",
-    "cached": "🔵 cached - reused from an earlier fetch",
-    "unavailable": "⚪ unavailable - nothing came back",
+    "live": "live - fetched during this run",
+    "cached": "cached - reused from an earlier fetch",
+    "unavailable": "unavailable - nothing came back",
 }
 
 
 def data_source_caption(source):
-    """Show whether a section came from live, cached, or unavailable data."""
+    """Show whether a section used live, cached, or unavailable data."""
     st.caption(DATA_SOURCE_LABEL.get(source, DATA_SOURCE_LABEL["unavailable"]))
 
 
@@ -106,31 +72,92 @@ def series_frame(series_by_name, wanted):
     return pd.DataFrame(columns) if columns else None
 
 
+with st.sidebar:
+    st.header("Company")
+    ticker = st.text_input(
+        "Ticker",
+        value="AAPL",
+        help=(
+            "Examples: AAPL, MSFT or BA. Other exchanges may need a suffix "
+            "such as .L or .NS."
+        ),
+    )
+    today = dt.date.today()
+    start_date = st.date_input(
+        "From",
+        value=today - dt.timedelta(days=365 * 3),
+    )
+    end_date = st.date_input("To", value=today)
+    run_it = st.button("Run the crew", type="primary", use_container_width=True)
+
+    st.divider()
+    st.subheader("Backend")
+    st.caption(f"API: {config.API_URL}")
+
+    try:
+        response = requests.get(f"{API_URL}/health", timeout=QUICK_TIMEOUT)
+        response.raise_for_status()
+        service = response.json()
+
+        if service.get("missing_config"):
+            st.error(
+                "The API is up but not configured: "
+                + ", ".join(service["missing_config"])
+            )
+        else:
+            st.success(f"Connected - {service.get('model')}")
+
+        st.subheader("Data sources")
+        for name, switched_on in (service.get("sources") or {}).items():
+            st.write(("ON - " if switched_on else "off - ") + name)
+        api_reachable = True
+    except (requests.RequestException, ValueError) as error:
+        st.error(f"Could not reach the API: {error}")
+        st.caption("Start it with: uvicorn api:app --port 8000")
+        api_reachable = False
+
+
 if run_it:
-    # A new click represents a new requested run. Remove the previous result
-    # first so a backend failure cannot leave an old company's report on screen
-    # as if the new run succeeded.
     st.session_state.pop("result", None)
 
     if not api_reachable:
         st.error("The analysis cannot start until the API is reachable.")
         st.stop()
 
+    payload = {
+        "ticker": ticker.strip().upper(),
+        "start_date": str(start_date),
+        "end_date": str(end_date),
+    }
+
     with st.status(f"Running the crew on {ticker}", expanded=True) as running:
         result = None
         try:
-            for event in api_client.stream_analysis(
-                ticker,
-                str(start_date),
-                str(end_date),
-            ):
-                if event.get("event") == "progress":
-                    st.write(
-                        f"**{event.get('agent')}** - {event.get('message')}"
-                    )
-                elif event.get("event") == "result":
-                    result = event.get("result")
-        except api_client.ApiError as error:
+            with requests.post(
+                f"{API_URL}/analyse/stream",
+                json=payload,
+                stream=True,
+                timeout=RUN_TIMEOUT,
+            ) as response:
+                response.raise_for_status()
+
+                for line in response.iter_lines(decode_unicode=True):
+                    if not line:
+                        continue
+
+                    event = json.loads(line)
+                    event_type = event.get("event")
+
+                    if event_type == "progress":
+                        st.write(
+                            f"**{event.get('agent')}** - {event.get('message')}"
+                        )
+                    elif event_type == "result":
+                        result = event.get("result")
+                    elif event_type == "error":
+                        raise RuntimeError(event.get("detail", "The analysis failed"))
+
+        except (requests.RequestException, json.JSONDecodeError, RuntimeError) as error:
             log.error("run failed for %s: %s", ticker, error)
             running.update(
                 label=f"Failed to analyse {ticker}",
@@ -146,10 +173,7 @@ if run_it:
                 state="error",
                 expanded=True,
             )
-            st.error(
-                f"No result was produced for {ticker}. "
-                "Check the API log and try again."
-            )
+            st.error(f"No result was produced for {ticker}.")
             st.stop()
 
         st.session_state["result"] = result
@@ -158,6 +182,7 @@ if run_it:
             state="complete",
             expanded=False,
         )
+
 
 result = st.session_state.get("result")
 
@@ -184,24 +209,31 @@ report_tab, fundamentals_tab, price_tab, data_tab, log_tab = st.tabs(
 with report_tab:
     st.markdown(result.get("report") or "No report was produced.")
 
-    if result.get("pdf_url"):
+    pdf_url = result.get("pdf_url")
+    if pdf_url:
         try:
+            response = requests.get(
+                f"{API_URL}{pdf_url}",
+                timeout=QUICK_TIMEOUT,
+            )
+            response.raise_for_status()
             st.download_button(
                 "Download the PDF",
-                api_client.fetch_pdf(result["pdf_url"]),
+                response.content,
                 file_name=f"{result_ticker}_report.pdf",
                 mime="application/pdf",
             )
-        except api_client.ApiError as error:
-            st.error(str(error))
+        except requests.RequestException as error:
+            st.error(f"Could not fetch the PDF: {error}")
 
 
 with fundamentals_tab:
     data_source_caption(fundamentals.get("data_source", "unavailable"))
+
     if not fundamentals.get("available"):
         st.warning(fundamentals.get("note", "No statement data available."))
     else:
-        st.subheader("The numbers")
+        st.subheader("Financial metrics")
         st.dataframe(
             metrics_table(
                 fundamentals.get("metrics") or {},
@@ -213,13 +245,12 @@ with fundamentals_tab:
 
         st.subheader("Valuation against its own history")
         for name in ("pe", "pb"):
-            result_for = (fundamentals.get("valuation") or {}).get(name)
+            value = (fundamentals.get("valuation") or {}).get(name)
             title = "P/E" if name == "pe" else "P/B"
-            if result_for:
+            if value:
                 st.write(
-                    f"**{title}** {result_for['current']:.1f} today "
-                    f"vs {result_for['median']:.1f} median - "
-                    f"{result_for['verdict']}"
+                    f"**{title}** {value['current']:.1f} today vs "
+                    f"{value['median']:.1f} median - {value['verdict']}"
                 )
             else:
                 st.write(f"**{title}** not enough history to compare")
@@ -236,13 +267,12 @@ with fundamentals_tab:
 
         for name in ("revenue_profit", "margins", "cash_vs_profit", "debt"):
             if charts.get(name):
-                st.image(api_client.chart_url(charts[name]))
-
-        st.caption(fundamentals.get("data_note", ""))
+                st.image(f"{API_PUBLIC_URL}{charts[name]}")
 
 
 with price_tab:
     data_source_caption(analysis.get("data_source", "unavailable"))
+
     if not analysis.get("available"):
         st.warning(analysis.get("note", "No price data available."))
     else:
@@ -251,34 +281,32 @@ with price_tab:
             hide_index=True,
             use_container_width=True,
         )
-        st.write(f"**Trend** {analysis.get('trend')}")
-        against_index = analysis.get("benchmark")
-        if against_index:
+        st.write(f"**Trend:** {analysis.get('trend')}")
+
+        benchmark = analysis.get("benchmark")
+        if benchmark:
             st.write(
-                f"**Against {analysis.get('benchmark_symbol')}** "
-                f"{against_index['verdict']}"
+                f"**Against {analysis.get('benchmark_symbol')}:** "
+                f"{benchmark['verdict']}"
             )
-        st.caption(
-            f"Sharpe uses a risk-free rate of "
-            f"{analysis.get('risk_free_rate', 0):.1%}."
-        )
+
         if charts.get("price"):
-            st.image(api_client.chart_url(charts["price"]))
+            st.image(f"{API_PUBLIC_URL}{charts['price']}")
 
-        st.subheader("News")
-        data_source_caption(research.get("news_data_source", "unavailable"))
-        for article in research.get("articles") or []:
-            st.write(f"[{article.get('published')}] {article.get('title')}")
+    st.subheader("News")
+    data_source_caption(research.get("news_data_source", "unavailable"))
+    for article in research.get("articles") or []:
+        st.write(f"[{article.get('published')}] {article.get('title')}")
 
-        st.subheader("Retail chatter")
-        data_source_caption(research.get("social_data_source", "unavailable"))
-        st.write(research.get("social_sentiment"))
+    st.subheader("Retail chatter")
+    data_source_caption(research.get("social_data_source", "unavailable"))
+    st.write(research.get("social_sentiment") or "No social sentiment available.")
 
 
 with data_tab:
     st.caption(
-        "Everything the report is built on. Every figure here was "
-        "calculated in Python, not by the language model."
+        "The report uses calculated Python values and fetched source data. "
+        "The language model does not calculate the financial metrics."
     )
 
     statements = series_frame(
@@ -303,42 +331,14 @@ with data_tab:
 
 
 with log_tab:
-    st.caption(
-        "What each agent did, in order. Not the model's private reasoning - "
-        "just what it was asked and what it decided."
-    )
-    log_entries = result.get("conversation_log") or []
+    st.caption("What each agent did during the workflow.")
 
+    log_entries = result.get("conversation_log") or []
     for number, entry in enumerate(log_entries, start=1):
         agent = entry.get("agent")
         message = entry.get("message", "")
-        if agent == "orchestrator_review":
-            accepted = number == len(log_entries)
-            icon = "✅" if accepted else "🔁"
-            heading = (
-                "Reviewer - accepted"
-                if accepted
-                else "Reviewer - sending work back"
-            )
-            st.write(f"{icon} **{number}. {heading}** - {message}")
-        else:
-            st.write(f"**{number}. {agent}** - {message}")
+        st.write(f"**{number}. {agent}** - {message}")
 
-    st.divider()
-    if not result.get("report"):
-        st.info("The crew stopped before writing a report - see the errors above.")
-    else:
+    if result.get("report"):
         revisions = result.get("revision_count", 0)
-        cap = result.get("max_revisions", config.MAX_REVISIONS)
-        if revisions == 0:
-            st.success("Accepted on the first draft - no revisions needed.")
-        elif revisions >= cap:
-            st.warning(
-                f"Accepted after {revisions} of {cap} revisions - the cap was "
-                "reached, so the report stands even if the reviewer would "
-                "have asked for more."
-            )
-        else:
-            st.success(
-                f"Accepted after {revisions} of {cap} possible revisions."
-            )
+        st.caption(f"Revisions used: {revisions}")
