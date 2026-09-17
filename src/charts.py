@@ -1,21 +1,19 @@
-"""Draws the 5 charts and saves them as PNG files.
-
-Used by both the app and the PDF.
-"""
+"""Draw the charts used by the app and PDF report."""
 
 import matplotlib
 
-matplotlib.use("Agg")            # no window, just files
+matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt  # noqa: E402
 
-from src import config           # noqa: E402
+from src import config  # noqa: E402
+from src.tools import ratios  # noqa: E402
 
 log = config.get_logger(__name__)
 
 
 def save(figure, ticker, name):
-    """Save a chart into the output folder and return its path."""
+    """Save a chart in the output folder and return its path."""
     config.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     path = config.OUTPUT_DIR / f"{ticker.replace('.', '_')}_{name}.png"
     figure.tight_layout()
@@ -25,12 +23,12 @@ def save(figure, ticker, name):
 
 
 def year_labels(series):
-    """Fiscal years for the x axis, as text."""
-    return [str(i.year) if hasattr(i, "year") else str(i) for i in series.index]
+    """Return fiscal-year labels for a Series index."""
+    return [str(item.year) if hasattr(item, "year") else str(item) for item in series.index]
 
 
 def revenue_and_profit(series, ticker, currency):
-    """Revenue and net profit bars, last 4 years."""
+    """Draw revenue and net profit for the latest four years."""
     revenue = series.get("revenue")
     profit = series.get("net_income")
     if revenue is None or profit is None:
@@ -41,8 +39,8 @@ def revenue_and_profit(series, ticker, currency):
     spots = range(len(revenue))
 
     figure, axes = plt.subplots(figsize=(7.5, 3.6))
-    axes.bar([s - 0.2 for s in spots], revenue.values, width=0.4, label="Revenue")
-    axes.bar([s + 0.2 for s in spots], profit.values, width=0.4, label="Net profit")
+    axes.bar([spot - 0.2 for spot in spots], revenue.values, width=0.4, label="Revenue")
+    axes.bar([spot + 0.2 for spot in spots], profit.values, width=0.4, label="Net profit")
     axes.set_title(f"Revenue and net profit ({currency or 'reported currency'})")
     axes.set_xticks(list(spots))
     axes.set_xticklabels(year_labels(revenue))
@@ -51,7 +49,7 @@ def revenue_and_profit(series, ticker, currency):
 
 
 def margin_trend(series, ticker):
-    """Operating and net margin over time."""
+    """Draw operating and net margin over time."""
     operating = series.get("operating_margin")
     net = series.get("net_margin")
     if operating is None and net is None:
@@ -59,11 +57,19 @@ def margin_trend(series, ticker):
 
     figure, axes = plt.subplots(figsize=(7.5, 3.6))
     if operating is not None:
-        axes.plot(year_labels(operating), (operating * 100).values,
-                  marker="o", label="Operating margin")
+        axes.plot(
+            year_labels(operating),
+            (operating * 100).values,
+            marker="o",
+            label="Operating margin",
+        )
     if net is not None:
-        axes.plot(year_labels(net), (net * 100).values,
-                  marker="o", label="Net margin")
+        axes.plot(
+            year_labels(net),
+            (net * 100).values,
+            marker="o",
+            label="Net margin",
+        )
     axes.set_title("Margin trend")
     axes.set_ylabel("%")
     axes.legend()
@@ -71,7 +77,7 @@ def margin_trend(series, ticker):
 
 
 def cash_vs_profit(series, ticker, currency):
-    """Operating cash flow next to net profit - does profit become cash?"""
+    """Draw operating cash flow beside net profit."""
     cash = series.get("operating_cash_flow")
     profit = series.get("net_income")
     if cash is None or profit is None:
@@ -79,8 +85,8 @@ def cash_vs_profit(series, ticker, currency):
 
     spots = range(len(cash))
     figure, axes = plt.subplots(figsize=(7.5, 3.6))
-    axes.bar([s - 0.2 for s in spots], cash.values, width=0.4, label="Operating cash flow")
-    axes.bar([s + 0.2 for s in spots], profit.values, width=0.4, label="Net profit")
+    axes.bar([spot - 0.2 for spot in spots], cash.values, width=0.4, label="Operating cash flow")
+    axes.bar([spot + 0.2 for spot in spots], profit.values, width=0.4, label="Net profit")
     axes.set_title(f"Cash flow vs profit ({currency or 'reported currency'})")
     axes.set_xticks(list(spots))
     axes.set_xticklabels(year_labels(cash))
@@ -89,20 +95,25 @@ def cash_vs_profit(series, ticker, currency):
 
 
 def debt_trend(series, ticker):
-    """Debt to equity over time, with the level we flag as too high."""
+    """Draw debt to equity and the same threshold used by the red-flag rule."""
     leverage = series.get("debt_to_equity")
     if leverage is None or leverage.dropna().empty:
         return None
 
     figure, axes = plt.subplots(figsize=(7.5, 3.6))
     axes.plot(year_labels(leverage), leverage.values, marker="o")
-    axes.axhline(2.0, linestyle="--", linewidth=1, color="grey")
+    axes.axhline(
+        ratios.DEBT_TO_EQUITY_CEILING,
+        linestyle="--",
+        linewidth=1,
+        color="grey",
+    )
     axes.set_title("Debt to equity (dashed line = the level we flag)")
     return save(figure, ticker, "debt")
 
 
 def price_with_averages(series, ticker):
-    """Closing price with the 50-day and 200-day averages."""
+    """Draw closing price with available moving averages."""
     close = series.get("close")
     if close is None or close.empty:
         return None
@@ -112,8 +123,12 @@ def price_with_averages(series, ticker):
     for name in ("ma_50", "ma_200"):
         average = series.get(name)
         if average is not None and not average.dropna().empty:
-            axes.plot(average.index, average.values, linewidth=1.1,
-                      label=name.replace("ma_", "") + "-day average")
+            axes.plot(
+                average.index,
+                average.values,
+                linewidth=1.1,
+                label=name.replace("ma_", "") + "-day average",
+            )
     axes.set_title("Price with moving averages")
     axes.legend()
     figure.autofmt_xdate()
@@ -121,7 +136,7 @@ def price_with_averages(series, ticker):
 
 
 def build_all(fundamentals, price_series, ticker):
-    """Draw every chart we have data for."""
+    """Draw every chart for which the required data is available."""
     series = fundamentals.get("series", {}) or {}
     currency = fundamentals.get("currency")
 
@@ -132,10 +147,6 @@ def build_all(fundamentals, price_series, ticker):
         "debt": debt_trend(series, ticker),
         "price": price_with_averages(price_series or {}, ticker),
     }
-
-    drawn = {}
-    for name, path in charts.items():
-        if path:
-            drawn[name] = path
+    drawn = {name: path for name, path in charts.items() if path}
     log.info("charts: drew %d of 5 for %s", len(drawn), ticker)
     return drawn
