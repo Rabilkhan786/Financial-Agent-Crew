@@ -12,6 +12,7 @@ REQUEST_TIMEOUT = 20
 
 
 def _sentiment_summary(posts):
+    """Summarize Bullish/Bearish tags from fetched posts."""
     bullish = sum(post.get("sentiment") == "Bullish" for post in posts)
     bearish = sum(post.get("sentiment") == "Bearish" for post in posts)
 
@@ -27,7 +28,7 @@ def _sentiment_summary(posts):
 
 
 def fetch_social_posts(ticker, limit=None):
-    """Return recent StockTwits posts for one ticker."""
+    """Return post count and sentiment summary for one ticker."""
     limit = limit or config.SOCIAL_LIMIT
     url = STOCKTWITS_URL.format(symbol=ticker.upper())
 
@@ -41,8 +42,6 @@ def fetch_social_posts(ticker, limit=None):
     except Exception as error:
         log.warning("StockTwits fetch failed for %s: %s", ticker, error)
         return {
-            "source": "StockTwits",
-            "posts": [],
             "post_count": 0,
             "social_sentiment": "insufficient data",
             "data_source": "unavailable",
@@ -54,22 +53,13 @@ def fetch_social_posts(ticker, limit=None):
         sentiment = (
             ((message.get("entities") or {}).get("sentiment") or {}).get("basic")
         )
-        posts.append(
-            {
-                "text": (message.get("body") or "").strip(),
-                "created": (message.get("created_at") or "")[:10],
-                "sentiment": sentiment,
-            }
-        )
+        posts.append({"sentiment": sentiment})
 
-    if len(posts) < config.MIN_SOCIAL_POSTS:
-        sentiment_text = "insufficient data"
-    else:
+    sentiment_text = "insufficient data"
+    if len(posts) >= config.MIN_SOCIAL_POSTS:
         sentiment_text = _sentiment_summary(posts)
 
     return {
-        "source": "StockTwits",
-        "posts": posts,
         "post_count": len(posts),
         "social_sentiment": sentiment_text,
         "data_source": "live" if posts else "unavailable",
