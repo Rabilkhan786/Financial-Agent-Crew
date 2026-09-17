@@ -1,20 +1,21 @@
 """Validate the ticker and review the final report."""
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from src.components.logging import get_logger
 from src.core import llm
 from src.tools import market_data
+from src.utils import formatting
 
 log = get_logger(__name__)
 
 
 class ReviewDecision(BaseModel):
-    """Small structured response used by the reviewer."""
+    """Structured result returned by the report reviewer."""
 
     needs_revision: bool = False
-    target: str = Field(default="")
-    reason: str = Field(default="")
+    target: str = ""
+    reason: str = ""
 
 
 REVIEW_PROMPT = """Review this financial report against the agent findings.
@@ -43,7 +44,7 @@ VALID_TARGETS = {"fundamentals_analyst", "market_researcher"}
 
 
 def run(crew_state):
-    """Validate the ticker before starting the workflow."""
+    """Validate the ticker and store its profile for later agents."""
     ticker = crew_state["ticker"]
     profile = market_data.fetch_profile(ticker)
     company = profile.get("name") or ticker
@@ -53,6 +54,7 @@ def run(crew_state):
         message = f"Could not validate ticker {ticker}."
         return {
             "company": company,
+            "profile": profile,
             "ticker_valid": False,
             "conversation_log": [
                 {"agent": "orchestrator", "message": message}
@@ -63,6 +65,7 @@ def run(crew_state):
     message = f"Validated {company} ({ticker}) and started the analysis."
     return {
         "company": company,
+        "profile": profile,
         "ticker_valid": True,
         "conversation_log": [
             {"agent": "orchestrator", "message": message}
@@ -71,12 +74,12 @@ def run(crew_state):
 
 
 def route_after_intake(crew_state):
-    """Stop when the ticker is invalid."""
+    """Continue only when the ticker was validated."""
     return "continue" if crew_state.get("ticker_valid") else "stop"
 
 
 def review(crew_state):
-    """Review the report and optionally send one agent back to revise."""
+    """Review the report and optionally route one agent back for revision."""
     revision_count = crew_state.get("revision_count", 0)
     max_revisions = crew_state.get("max_revisions", 1)
 
@@ -93,13 +96,14 @@ def review(crew_state):
 
     fundamentals = crew_state.get("fundamentals") or {}
     research = crew_state.get("research") or {}
-    flags = fundamentals.get("red_flags") or []
 
     decision = llm.ask_structured(
         REVIEW_PROMPT.format(
             fundamentals=(fundamentals.get("interpretation") or "not available")[:1500],
             research=(research.get("summary") or "not available")[:1200],
-            flags="\n".join(f"- {item['message']}" for item in flags) or "- none",
+            flags=formatting.red_flags_block(
+                fundamentals.get("red_flags") or []
+            ),
             report=(crew_state.get("report") or "")[:2500],
         ),
         ReviewDecision,
@@ -131,6 +135,6 @@ def review(crew_state):
 
 
 def route_after_review(crew_state):
-    """Return the next LangGraph route after review."""
+    """Return the next LangGraph route after the review step."""
     target = crew_state.get("revision_target", "")
     return target if target in VALID_TARGETS else "accept"
