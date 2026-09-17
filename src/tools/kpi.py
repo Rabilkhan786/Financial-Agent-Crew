@@ -1,7 +1,4 @@
-"""Calculates price numbers like return and risk.
-
-No LLM used here, just pandas and numpy, so it can be tested.
-"""
+"""Deterministic price-performance and risk calculations."""
 
 import numpy as np
 import pandas as pd
@@ -12,14 +9,17 @@ MA_SHORT = 50
 MA_LONG = 200
 DEFAULT_RISK_FREE_RATE = 0.0
 
-# Which index each market is judged against. Beating "the market" only means
-# something if it is the right market, so we pick it from the ticker ending.
-BENCHMARKS = {".NS": "^NSEI", ".BO": "^BSESN", ".L": "^FTSE", ".TO": "^GSPTSE"}
+BENCHMARKS = {
+    ".NS": "^NSEI",
+    ".BO": "^BSESN",
+    ".L": "^FTSE",
+    ".TO": "^GSPTSE",
+}
 DEFAULT_BENCHMARK = "^GSPC"
 
 
 def benchmark_for(ticker):
-    """The index this ticker should be compared against."""
+    """Return the benchmark index for a ticker's exchange suffix."""
     for ending, index in BENCHMARKS.items():
         if ticker.upper().endswith(ending):
             return index
@@ -27,36 +27,42 @@ def benchmark_for(ticker):
 
 
 def clean(prices):
-    """Sorted, numeric, positive prices. None if there are none left.
-
-    Zero and negative prices are data errors. Dividing by one gives a return
-    that is worse than having no return at all.
-    """
+    """Return sorted positive numeric prices, or None when unavailable."""
     if prices is None or len(prices) == 0:
         return None
-    numbers = pd.to_numeric(pd.Series(prices), errors="coerce").dropna().sort_index()
+
+    numbers = pd.to_numeric(
+        pd.Series(prices),
+        errors="coerce",
+    ).dropna().sort_index()
     numbers = numbers[numbers > 0]
-    if numbers.empty:
-        return None
-    return numbers
+    return None if numbers.empty else numbers
 
 
 def years_covered(prices):
-    """How many years the price history spans."""
+    """Return the time span of a price series in years."""
     if len(prices) < 2:
         return None
+
     try:
-        days = (pd.Timestamp(prices.index[-1]) - pd.Timestamp(prices.index[0])).days
+        days = (
+            pd.Timestamp(prices.index[-1])
+            - pd.Timestamp(prices.index[0])
+        ).days
     except (TypeError, ValueError):
-        # The index is row numbers, not dates. Count trading days instead.
-        days = (len(prices) - 1) / TRADING_DAYS_PER_YEAR * CALENDAR_DAYS_PER_YEAR
+        days = (
+            (len(prices) - 1)
+            / TRADING_DAYS_PER_YEAR
+            * CALENDAR_DAYS_PER_YEAR
+        )
+
     if days <= 0:
         return None
     return days / CALENDAR_DAYS_PER_YEAR
 
 
 def daily_returns(prices):
-    """How much the price moved each day."""
+    """Return daily percentage price changes."""
     priced = clean(prices)
     if priced is None or len(priced) < 2:
         return None
@@ -64,7 +70,7 @@ def daily_returns(prices):
 
 
 def latest_value(column):
-    """The most recent usable value, or None. Never a blank (NaN)."""
+    """Return the latest non-null value as a float."""
     if column is None:
         return None
     usable = column.dropna()
@@ -73,10 +79,8 @@ def latest_value(column):
     return float(usable.iloc[-1])
 
 
-# --- Return -----------------------------------------------------------------
-
 def total_return(prices):
-    """Price change from the first day to the last."""
+    """Return total price change from the first close to the last."""
     priced = clean(prices)
     if priced is None or len(priced) < 2:
         return None
@@ -84,24 +88,22 @@ def total_return(prices):
 
 
 def annualised_return(prices):
-    """The same return stated as a per-year rate."""
+    """Return total price change expressed as an annual rate."""
     priced = clean(prices)
     if priced is None or len(priced) < 2:
         return None
+
     years = years_covered(priced)
     if years is None or years <= 0:
         return None
-    return float((priced.iloc[-1] / priced.iloc[0]) ** (1 / years) - 1)
 
+    return float(
+        (priced.iloc[-1] / priced.iloc[0]) ** (1 / years) - 1
+    )
 
-# --- Risk -------------------------------------------------------------------
 
 def volatility(prices):
-    """How much the price bounces around, stated per year.
-
-    Daily movement is scaled by the square root of the trading days in a year,
-    which is the usual way of putting it on a yearly footing.
-    """
+    """Return annualised standard deviation of daily returns."""
     moves = daily_returns(prices)
     if moves is None or len(moves) < 2:
         return None
@@ -109,24 +111,17 @@ def volatility(prices):
 
 
 def max_drawdown(prices):
-    """The worst fall from a peak, as a negative number.
-
-    This is the loss someone would have sat through if they bought at the worst
-    moment in the period.
-    """
+    """Return the largest peak-to-trough decline."""
     priced = clean(prices)
     if priced is None or len(priced) < 2:
         return None
+
     peaks = priced.cummax()
     return float((priced / peaks - 1).min())
 
 
 def sharpe_ratio(prices, risk_free_rate=DEFAULT_RISK_FREE_RATE):
-    """Return above the safe rate, per unit of bounciness.
-
-    The safe rate is passed in rather than hardcoded: it differs by country and
-    by year, and the report states which one was used.
-    """
+    """Return annualised excess return divided by volatility."""
     yearly = annualised_return(prices)
     bounce = volatility(prices)
     if yearly is None or bounce is None or bounce == 0:
@@ -134,10 +129,8 @@ def sharpe_ratio(prices, risk_free_rate=DEFAULT_RISK_FREE_RATE):
     return float((yearly - risk_free_rate) / bounce)
 
 
-# --- Trend ------------------------------------------------------------------
-
 def moving_average(prices, window):
-    """Average price over a window of days. Blank until there is enough data."""
+    """Return a rolling price average for the requested window."""
     priced = clean(prices)
     if priced is None:
         return None
@@ -145,11 +138,7 @@ def moving_average(prices, window):
 
 
 def moving_average_summary(prices):
-    """The price against its 50 and 200 day averages, in words.
-
-    The sentence is written here, not by the model, so the report can never say
-    a share is above an average it is actually below.
-    """
+    """Compare the latest price with its 50-day and 200-day averages."""
     priced = clean(prices)
     price = latest_value(priced)
     short = latest_value(moving_average(prices, MA_SHORT))
@@ -158,25 +147,36 @@ def moving_average_summary(prices):
     if price is None or short is None or long is None:
         trend = "not enough price history to judge the trend"
     elif price > short and price > long:
-        trend = f"price is above both its {MA_SHORT}-day and {MA_LONG}-day average"
+        trend = (
+            f"price is above both its {MA_SHORT}-day and "
+            f"{MA_LONG}-day average"
+        )
     elif price < short and price < long:
-        trend = f"price is below both its {MA_SHORT}-day and {MA_LONG}-day average"
+        trend = (
+            f"price is below both its {MA_SHORT}-day and "
+            f"{MA_LONG}-day average"
+        )
     elif price > long:
-        trend = f"price is above its {MA_LONG}-day average but below its {MA_SHORT}-day"
+        trend = (
+            f"price is above its {MA_LONG}-day average but below its "
+            f"{MA_SHORT}-day"
+        )
     else:
-        trend = f"price is above its {MA_SHORT}-day average but below its {MA_LONG}-day"
+        trend = (
+            f"price is above its {MA_SHORT}-day average but below its "
+            f"{MA_LONG}-day"
+        )
 
-    return {"price": price, f"ma_{MA_SHORT}": short, f"ma_{MA_LONG}": long, "trend": trend}
+    return {
+        "price": price,
+        f"ma_{MA_SHORT}": short,
+        f"ma_{MA_LONG}": long,
+        "trend": trend,
+    }
 
-
-# --- Against the market -----------------------------------------------------
 
 def return_vs_benchmark(prices, index_prices):
-    """Compare the share with an index over the days they both traded.
-
-    Trimming to shared dates first matters: comparing a return measured over
-    one window with one measured over another gives a confidently wrong answer.
-    """
+    """Compare stock and benchmark returns over their shared trading days."""
     share = clean(prices)
     index = clean(index_prices)
     if share is None or index is None:
@@ -197,18 +197,21 @@ def return_vs_benchmark(prices, index_prices):
     else:
         verdict = f"lagged the index by {abs(gap):.1%}"
 
-    return {"stock_return": share_return, "benchmark_return": index_return,
-            "excess_return": gap, "days_compared": len(shared_days), "verdict": verdict}
+    return {
+        "stock_return": share_return,
+        "benchmark_return": index_return,
+        "excess_return": gap,
+        "days_compared": len(shared_days),
+        "verdict": verdict,
+    }
 
 
-# --- Everything in one call -------------------------------------------------
-
-def compute_all(prices, benchmark_prices=None, risk_free_rate=DEFAULT_RISK_FREE_RATE):
-    """Work out every price number at once.
-
-    Same shape as ratios.compute_all: latest values are never blank, and
-    anything missing is named in "unavailable".
-    """
+def compute_all(
+    prices,
+    benchmark_prices=None,
+    risk_free_rate=DEFAULT_RISK_FREE_RATE,
+):
+    """Calculate all price metrics used by the Data Analyst."""
     priced = clean(prices)
 
     values = {
@@ -227,20 +230,29 @@ def compute_all(prices, benchmark_prices=None, risk_free_rate=DEFAULT_RISK_FREE_
     series = {}
     if priced is not None:
         series["close"] = priced
+
         for window in (MA_SHORT, MA_LONG):
             average = moving_average(priced, window)
             if average is not None and not average.dropna().empty:
                 series[f"ma_{window}"] = average
+
         moves = daily_returns(priced)
         if moves is not None:
             series["daily_returns"] = moves
 
     against_index = return_vs_benchmark(priced, benchmark_prices)
 
-    unavailable = sorted(name for name, value in values.items() if value is None)
+    unavailable = sorted(
+        name for name, value in values.items() if value is None
+    )
     if against_index is None:
         unavailable.append("return_vs_benchmark")
 
-    return {"latest": values, "series": series, "trend": trend["trend"],
-            "benchmark": against_index, "risk_free_rate": risk_free_rate,
-            "unavailable": sorted(unavailable)}
+    return {
+        "latest": values,
+        "series": series,
+        "trend": trend["trend"],
+        "benchmark": against_index,
+        "risk_free_rate": risk_free_rate,
+        "unavailable": sorted(unavailable),
+    }
