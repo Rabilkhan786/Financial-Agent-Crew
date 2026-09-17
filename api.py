@@ -159,7 +159,10 @@ def analyse_stream(request: AnalysisRequest):
 @app.get("/charts/{filename}")
 def chart(filename: str):
     """Serve one generated PNG chart."""
-    if pathlib.Path(filename).name != filename or pathlib.Path(filename).suffix.lower() != ".png":
+    chart_path = pathlib.Path(filename)
+    invalid_name = chart_path.name != filename
+    invalid_extension = chart_path.suffix.lower() != ".png"
+    if invalid_name or invalid_extension:
         raise HTTPException(status_code=400, detail="bad chart filename")
 
     path = config.OUTPUT_DIR / filename
