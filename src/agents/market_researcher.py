@@ -1,8 +1,4 @@
-"""Reads news and social posts about the company, and summarises them.
-
-This file does not look at financial statements — that is a different
-agent's job.
-"""
+"""Research recent news and retail sentiment for one company."""
 
 from src import config, llm, state
 from src.tools import market_data, news, social, sourcing
@@ -39,71 +35,90 @@ Rules:
 
 
 def _headline_text(articles):
+    """Format fetched articles for the model prompt."""
     if not articles:
         return "- no recent articles found"
+
     lines = []
     for article in articles:
         summary = article.get("summary") or ""
-        lines.append(f"- [{article.get('published', 'undated')}] {article['title']}"
-                     + (f" - {summary[:200]}" if summary else ""))
+        line = f"- [{article.get('published', 'undated')}] {article['title']}"
+        if summary:
+            line += f" - {summary[:200]}"
+        lines.append(line)
     return "\n".join(lines)
 
 
 def run(crew_state):
-    """Fetch news and social posts, then summarise the mood."""
+    """Fetch market context, summarise it, and verify quoted numbers."""
     ticker = crew_state["ticker"]
     log.info("market_researcher: starting %s", ticker)
 
     profile = market_data.fetch_profile(ticker)
     company = crew_state.get("company") or profile.get("name") or ticker
-
     headlines = news.fetch_news(ticker)
     chatter = social.fetch_social_posts(ticker)
 
     sentiment = headlines.get("sentiment") or {}
     if sentiment.get("average_score") is not None:
-        news_sentiment = (f"{sentiment['label']} "
-                          f"(score {sentiment['average_score']:+.2f} "
-                          f"across {sentiment['articles_scored']} articles)")
+        news_sentiment = (
+            f"{sentiment['label']} "
+            f"(score {sentiment['average_score']:+.2f} "
+            f"across {sentiment['articles_scored']} articles)"
+        )
     else:
         news_sentiment = "not scored - no sentiment provider configured"
 
     revision = ""
     if crew_state.get("revision_target") == "market_researcher":
-        revision = ("The reviewer sent this back with a specific request. "
-                    f"Address it directly: {crew_state.get('revision_reason', '')}")
+        revision = (
+            "The reviewer sent this back with a specific request. "
+            f"Address it directly: {crew_state.get('revision_reason', '')}"
+        )
 
-    summary_text = llm.ask(PROMPT.format(
-        company=company,
-        ticker=ticker,
-        sector=profile.get("sector") or "unknown",
-        headlines=_headline_text(headlines["articles"]),
-        social_sentiment=chatter["social_sentiment"],
-        news_sentiment=news_sentiment,
-        revision=revision,
-    ))
+    prompt_values = {
+        "company": company,
+        "ticker": ticker,
+        "sector": profile.get("sector") or "unknown",
+        "headlines": _headline_text(headlines["articles"]),
+        "social_sentiment": chatter["social_sentiment"],
+        "news_sentiment": news_sentiment,
+    }
+    summary_text = llm.ask(PROMPT.format(**prompt_values, revision=revision))
 
-    # Check the summary against its own sources before it moves on. The
-    # report writer treats this text as fact, so an invented number here
-    # would end up in the final report.
-    sources = {"research": {"articles": headlines["articles"], "social": chatter}}
+    sources = {
+        "research": {
+            "articles": headlines["articles"],
+            "social": chatter,
+        }
+    }
     invented = sourcing.unsourced_numbers(sources, summary_text)
     if invented:
-        log.warning("market_researcher: %s not in any headline - asking again", invented)
-        summary_text = llm.ask(
-            PROMPT.format(
-                company=company, ticker=ticker,
-                sector=profile.get("sector") or "unknown",
-                headlines=_headline_text(headlines["articles"]),
-                social_sentiment=chatter["social_sentiment"],
-                news_sentiment=news_sentiment,
-                revision=(f"Your last answer used these numbers, which appear in no "
-                          f"headline: {', '.join(invented)}. Write it again without "
-                          "them. Use only figures printed in the headlines above."))
-        ) or summary_text
+        log.warning(
+            "market_researcher: unsourced numbers %s - retrying summary",
+            invented,
+        )
+        retry_note = (
+            "Your last answer used these numbers, which appear in no headline: "
+            f"{', '.join(invented)}. Write it again without them. Use only "
+            "figures printed in the headlines above."
+        )
+        corrected = llm.ask(PROMPT.format(**prompt_values, revision=retry_note))
+        still_invented = sourcing.unsourced_numbers(sources, corrected)
 
-    summary = (f"Found {headlines['article_count']} articles via {headlines['source']} "
-               f"and {chatter['post_count']} posts via {chatter['source']}.")
+        if corrected and not still_invented:
+            summary_text = corrected
+        else:
+            log.warning(
+                "market_researcher: could not produce a verified summary; "
+                "continuing without model-written market commentary"
+            )
+            summary_text = ""
+
+    summary = (
+        f"Found {headlines['article_count']} articles via {headlines['source']} "
+        f"and {chatter['post_count']} posts via {chatter['source']}."
+    )
     log.info("market_researcher: %s", summary)
 
     return {
