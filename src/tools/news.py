@@ -11,7 +11,7 @@ log = get_logger(__name__)
 
 
 def fetch_news(ticker, limit=None):
-    """Return recent Yahoo Finance articles for one ticker."""
+    """Return recent Yahoo Finance headlines for one ticker."""
     limit = limit or config.NEWS_LIMIT
 
     try:
@@ -34,22 +34,10 @@ def fetch_news(ticker, limit=None):
                 dt.timezone.utc,
             ).date().isoformat()
 
-        url = (
-            (content.get("canonicalUrl") or {}).get("url")
-            or (content.get("clickThroughUrl") or {}).get("url")
-            or item.get("link")
-        )
-
         articles.append(
             {
                 "title": title,
-                "summary": (
-                    content.get("summary")
-                    or content.get("description")
-                    or ""
-                ).strip(),
                 "published": published,
-                "url": url,
             }
         )
 
