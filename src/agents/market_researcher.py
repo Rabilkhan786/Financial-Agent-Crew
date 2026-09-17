@@ -2,7 +2,7 @@
 
 from src.components.logging import get_logger
 from src.core import llm
-from src.tools import market_data, news, social
+from src.tools import news, social
 
 log = get_logger(__name__)
 
@@ -28,29 +28,25 @@ Use only the supplied information. Do not predict the share price.
 
 
 def run(crew_state):
-    """Fetch market context and summarize it with the LLM."""
+    """Fetch recent market context and summarize it with the LLM."""
     ticker = crew_state["ticker"]
-    profile = market_data.fetch_profile(ticker)
-    company = crew_state.get("company") or profile.get("name") or ticker
+    company = crew_state.get("company") or ticker
+    profile = crew_state.get("profile") or {}
 
     news_result = news.fetch_news(ticker)
     social_result = social.fetch_social_posts(ticker)
-
     articles = news_result.get("articles") or []
+
+    headlines = "- no recent articles found"
     if articles:
         headlines = "\n".join(
             f"- [{item.get('published') or 'undated'}] {item.get('title')}"
             for item in articles
         )
-    else:
-        headlines = "- no recent articles found"
 
     revision = ""
     if crew_state.get("revision_target") == "market_researcher":
-        revision = (
-            "Reviewer feedback: "
-            + crew_state.get("revision_reason", "")
-        )
+        revision = "Reviewer feedback: " + crew_state.get("revision_reason", "")
 
     summary = llm.ask(
         PROMPT.format(
@@ -72,15 +68,9 @@ def run(crew_state):
     return {
         "research": {
             "articles": articles,
-            "news_source": news_result.get("source"),
-            "news_data_source": news_result.get("data_source"),
-            "social": social_result,
-            "social_data_source": social_result.get("data_source"),
             "social_sentiment": social_result.get("social_sentiment"),
-            "profile": profile,
             "summary": summary,
         },
-        "company": company,
         "conversation_log": [
             {"agent": "market_researcher", "message": message}
         ],
