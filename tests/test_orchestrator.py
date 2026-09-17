@@ -1,9 +1,10 @@
-"""Tests for the orchestrator review and loop-back routes."""
+"""Tests for ticker intake, review decisions, and loop-back routes."""
 
 from src.agents import orchestrator
 
 
 def crew_state(count=0, cap=1):
+    """Return the minimal state required by the review step."""
     return {
         "report": "## Executive summary\nSteady business.",
         "revision_count": count,
@@ -14,6 +15,25 @@ def crew_state(count=0, cap=1):
         },
         "research": {"summary": "Recent news is mixed."},
     }
+
+
+def test_intake_stores_company_profile(monkeypatch):
+    profile = {
+        "name": "Test Company",
+        "currency": "USD",
+        "market_cap": 100,
+    }
+    monkeypatch.setattr(
+        orchestrator.market_data,
+        "fetch_profile",
+        lambda ticker: profile,
+    )
+
+    result = orchestrator.run({"ticker": "TEST"})
+
+    assert result["ticker_valid"] is True
+    assert result["company"] == "Test Company"
+    assert result["profile"] == profile
 
 
 def test_review_can_loop_back_to_market_researcher(monkeypatch):
