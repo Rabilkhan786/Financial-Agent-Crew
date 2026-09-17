@@ -1,138 +1,87 @@
-"""Research recent news and retail sentiment for one company."""
+"""Research recent company news and retail sentiment."""
 
-from src import config, llm, state
-from src.tools import market_data, news, social, sourcing
+from src.components.logging import get_logger
+from src.core import llm
+from src.tools import market_data, news, social
 
-log = config.get_logger(__name__)
+log = get_logger(__name__)
 
-PROMPT = """You are a market researcher briefing a private investor.
+PROMPT = """You are a market researcher.
 
 Company: {company} ({ticker})
 Sector: {sector}
 
-Recent news headlines (these are real articles, with their dates):
+Recent headlines:
 {headlines}
 
-Retail investor chatter: {social_sentiment}
-
-News sentiment score: {news_sentiment}
+Retail sentiment:
+{social_sentiment}
 
 {revision}
 
-Write 2 short paragraphs in plain English:
-1. What has actually happened at or around this company recently?
-2. What is the mood - and how much weight does it deserve?
+Write two short paragraphs:
+1. What has happened around the company recently?
+2. What is the current market mood?
 
-Rules:
-- Only use the headlines listed above. Do not add events you remember.
-- Every number you write must appear in the headlines above. If a headline says
-  profit rose 34%, write 34%. Do not widen it to "34-45%", do not round it, and
-  do not add a figure of your own such as a price target or a deal size.
-- If the chatter says "insufficient data", say so plainly and move on. Do not
-  guess at a mood from nothing.
-- Do not predict the share price.
+Use only the supplied information. Do not predict the share price.
 """
 
 
-def _headline_text(articles):
-    """Format fetched articles for the model prompt."""
-    if not articles:
-        return "- no recent articles found"
-
-    lines = []
-    for article in articles:
-        summary = article.get("summary") or ""
-        line = f"- [{article.get('published', 'undated')}] {article['title']}"
-        if summary:
-            line += f" - {summary[:200]}"
-        lines.append(line)
-    return "\n".join(lines)
-
-
 def run(crew_state):
-    """Fetch market context, summarise it, and verify quoted numbers."""
+    """Fetch market context and summarize it with the LLM."""
     ticker = crew_state["ticker"]
-    log.info("market_researcher: starting %s", ticker)
-
     profile = market_data.fetch_profile(ticker)
     company = crew_state.get("company") or profile.get("name") or ticker
-    headlines = news.fetch_news(ticker)
-    chatter = social.fetch_social_posts(ticker)
 
-    sentiment = headlines.get("sentiment") or {}
-    if sentiment.get("average_score") is not None:
-        news_sentiment = (
-            f"{sentiment['label']} "
-            f"(score {sentiment['average_score']:+.2f} "
-            f"across {sentiment['articles_scored']} articles)"
+    news_result = news.fetch_news(ticker)
+    social_result = social.fetch_social_posts(ticker)
+
+    articles = news_result.get("articles") or []
+    if articles:
+        headlines = "\n".join(
+            f"- [{item.get('published') or 'undated'}] {item.get('title')}"
+            for item in articles
         )
     else:
-        news_sentiment = "not scored - no sentiment provider configured"
+        headlines = "- no recent articles found"
 
     revision = ""
     if crew_state.get("revision_target") == "market_researcher":
         revision = (
-            "The reviewer sent this back with a specific request. "
-            f"Address it directly: {crew_state.get('revision_reason', '')}"
+            "Reviewer feedback: "
+            + crew_state.get("revision_reason", "")
         )
 
-    prompt_values = {
-        "company": company,
-        "ticker": ticker,
-        "sector": profile.get("sector") or "unknown",
-        "headlines": _headline_text(headlines["articles"]),
-        "social_sentiment": chatter["social_sentiment"],
-        "news_sentiment": news_sentiment,
-    }
-    summary_text = llm.ask(PROMPT.format(**prompt_values, revision=revision))
-
-    sources = {
-        "research": {
-            "articles": headlines["articles"],
-            "social": chatter,
-        }
-    }
-    invented = sourcing.unsourced_numbers(sources, summary_text)
-    if invented:
-        log.warning(
-            "market_researcher: unsourced numbers %s - retrying summary",
-            invented,
+    summary = llm.ask(
+        PROMPT.format(
+            company=company,
+            ticker=ticker,
+            sector=profile.get("sector") or "unknown",
+            headlines=headlines,
+            social_sentiment=social_result.get("social_sentiment"),
+            revision=revision,
         )
-        retry_note = (
-            "Your last answer used these numbers, which appear in no headline: "
-            f"{', '.join(invented)}. Write it again without them. Use only "
-            "figures printed in the headlines above."
-        )
-        corrected = llm.ask(PROMPT.format(**prompt_values, revision=retry_note))
-        still_invented = sourcing.unsourced_numbers(sources, corrected)
-
-        if corrected and not still_invented:
-            summary_text = corrected
-        else:
-            log.warning(
-                "market_researcher: could not produce a verified summary; "
-                "continuing without model-written market commentary"
-            )
-            summary_text = ""
-
-    summary = (
-        f"Found {headlines['article_count']} articles via {headlines['source']} "
-        f"and {chatter['post_count']} posts via {chatter['source']}."
     )
-    log.info("market_researcher: %s", summary)
+
+    message = (
+        f"Collected {len(articles)} news articles and "
+        f"{social_result.get('post_count', 0)} social posts."
+    )
+    log.info("%s: %s", ticker, message)
 
     return {
         "research": {
-            "articles": headlines["articles"],
-            "news_source": headlines["source"],
-            "news_data_source": headlines.get("data_source", "unavailable"),
-            "news_sentiment": sentiment or None,
-            "social": chatter,
-            "social_data_source": chatter.get("data_source", "unavailable"),
-            "social_sentiment": chatter["social_sentiment"],
+            "articles": articles,
+            "news_source": news_result.get("source"),
+            "news_data_source": news_result.get("data_source"),
+            "social": social_result,
+            "social_data_source": social_result.get("data_source"),
+            "social_sentiment": social_result.get("social_sentiment"),
             "profile": profile,
-            "summary": summary_text,
+            "summary": summary,
         },
         "company": company,
-        "conversation_log": [state.note("market_researcher", summary)],
+        "conversation_log": [
+            {"agent": "market_researcher", "message": message}
+        ],
     }
