@@ -11,7 +11,10 @@ log = get_logger(__name__)
 
 FIELD_MAP = {
     ratios.REVENUE: ["Total Revenue", "Operating Revenue"],
-    ratios.OPERATING_INCOME: ["Operating Income", "Total Operating Income As Reported"],
+    ratios.OPERATING_INCOME: [
+        "Operating Income",
+        "Total Operating Income As Reported",
+    ],
     ratios.NET_INCOME: [
         "Net Income",
         "Net Income Common Stockholders",
@@ -53,6 +56,7 @@ FIELD_MAP = {
 
 
 def _find_row(frames, names):
+    """Return the first usable statement row matching any supplied name."""
     for frame in frames:
         for name in names:
             if name in frame.index:
@@ -63,6 +67,7 @@ def _find_row(frames, names):
 
 
 def _total_debt(frames):
+    """Rebuild total debt when Yahoo reports only debt components."""
     long_term = _find_row(frames, ["Long Term Debt"])
     current = _find_row(frames, ["Current Debt"])
 
@@ -74,7 +79,7 @@ def _total_debt(frames):
 
 
 def fetch_statements(ticker, years=None):
-    """Return normalized annual statements for ratio calculations."""
+    """Return normalized annual statements used by the ratio calculations."""
     years = years or config.STATEMENT_YEARS
 
     try:
@@ -84,14 +89,16 @@ def fetch_statements(ticker, years=None):
             company.balance_sheet,
             company.cashflow,
         ]
-        frames = [frame for frame in frames if frame is not None and not frame.empty]
-        info = company.info or {}
+        frames = [
+            frame
+            for frame in frames
+            if frame is not None and not frame.empty
+        ]
     except Exception as error:
         log.error("Statement fetch failed for %s: %s", ticker, error)
         return {
             "data": pd.DataFrame(),
             "missing": list(FIELD_MAP),
-            "currency": None,
             "years": 0,
             "period_end": None,
             "data_source": "unavailable",
@@ -102,7 +109,6 @@ def fetch_statements(ticker, years=None):
         return {
             "data": pd.DataFrame(),
             "missing": list(FIELD_MAP),
-            "currency": info.get("currency"),
             "years": 0,
             "period_end": None,
             "data_source": "unavailable",
@@ -129,7 +135,6 @@ def fetch_statements(ticker, years=None):
     return {
         "data": data,
         "missing": sorted(missing),
-        "currency": info.get("currency"),
         "years": len(data),
         "period_end": data.index[-1].date().isoformat() if len(data) else None,
         "data_source": "live" if not data.empty else "unavailable",
@@ -138,7 +143,7 @@ def fetch_statements(ticker, years=None):
 
 
 def describe_gaps(result):
-    """Return a short note about missing statement fields."""
+    """Return a short note describing missing statement fields."""
     if result.get("error"):
         return result["error"]
 
