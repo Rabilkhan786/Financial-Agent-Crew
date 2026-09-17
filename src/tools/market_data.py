@@ -1,6 +1,4 @@
-"""Fetches prices, the company profile, and the benchmark index from Yahoo
-Finance.
-"""
+"""Fetch prices, company profile data, and benchmark prices from Yahoo Finance."""
 
 import datetime as dt
 
@@ -13,71 +11,85 @@ from src.tools import kpi, ratios
 log = config.get_logger(__name__)
 
 CACHE_MAX_AGE_HOURS = config.CACHE_HOURS_PRICES
-VALUATION_LOOKBACK_DAYS = 40      # nearest trading day to a fiscal year end
-
-# Only history() takes a timeout directly. yfinance's other calls (.info,
-# statements, .news) have no exposed timeout, and forcing one with a custom
-# requests.Session breaks yfinance's cookie handling and gets rate-limited
-# immediately - worse than the hang it was meant to fix. So those stay as
-# they are.
+VALUATION_LOOKBACK_DAYS = 40
 REQUEST_TIMEOUT = 20
 
 
-def _naive(prices):
-    """Strip the timezone from a price index.
+def _without_timezone(series):
+    """Remove timezone information from a DatetimeIndex when present."""
+    if isinstance(series.index, pd.DatetimeIndex) and series.index.tz is not None:
+        series = series.copy()
+        series.index = series.index.tz_localize(None)
+    return series
 
-    Yahoo returns exchange-local timestamps, but fiscal period ends are plain
-    dates. Comparing the two without this raises, so they are put on the same
-    footing before anything is looked up.
-    """
-    if isinstance(prices.index, pd.DatetimeIndex) and prices.index.tz is not None:
-        prices = prices.copy()
-        prices.index = prices.index.tz_localize(None)
-    return prices
+
+def _price_cache_key(symbol, start, end):
+    """Return the cache key used for a price request."""
+    return f"{symbol}:{start}:{end}"
 
 
 def _fetch_closes(symbol, start, end):
-    """Adjusted closing prices for one symbol over a date range."""
-    history = yf.Ticker(symbol).history(start=start, end=end, auto_adjust=True,
-                                        timeout=REQUEST_TIMEOUT)
+    """Fetch adjusted closing prices for one symbol."""
+    history = yf.Ticker(symbol).history(
+        start=start,
+        end=end,
+        auto_adjust=True,
+        timeout=REQUEST_TIMEOUT,
+    )
+
     if history is None or history.empty or "Close" not in history:
         return pd.Series(dtype=float)
-    return _naive(history["Close"].astype(float))
+
+    return _without_timezone(history["Close"].astype(float))
 
 
 def fetch_prices(symbol, start=None, end=None, use_cache=True):
-    """Closing prices, cached by symbol and date range. Empty Series on failure."""
-    key = f"{symbol}:{start}:{end}"
+    """Return closing prices for a symbol, using the disk cache when enabled."""
+    key = _price_cache_key(symbol, start, end)
+
     try:
-        if use_cache:
-            return cache.cached("prices", key, lambda: _fetch_closes(symbol, start, end),
-                                max_age_hours=CACHE_MAX_AGE_HOURS)
-        return _fetch_closes(symbol, start, end)
+        if not use_cache:
+            return _fetch_closes(symbol, start, end)
+
+        return cache.cached(
+            "prices",
+            key,
+            lambda: _fetch_closes(symbol, start, end),
+            max_age_hours=CACHE_MAX_AGE_HOURS,
+        )
     except Exception as error:
         log.error("price fetch failed for %s: %s", symbol, error)
         return pd.Series(dtype=float)
 
 
 def _fetch_info(symbol):
+    """Fetch Yahoo's company profile payload."""
     try:
         return yf.Ticker(symbol).info or {}
     except Exception:
         return {}
 
 
+def _load_profile_info(symbol, use_cache):
+    """Fetch company profile information directly or from cache."""
+    if not use_cache:
+        return _fetch_info(symbol), "live"
+
+    info = cache.cached(
+        "profile",
+        symbol,
+        lambda: _fetch_info(symbol),
+        max_age_hours=CACHE_MAX_AGE_HOURS,
+    )
+    return info, cache.freshness("profile", symbol)
+
+
 def fetch_profile(symbol, use_cache=True):
-    """Company name, sector, currency, and today's headline multiples."""
-    source = "unavailable"
+    """Return the company profile fields used by the agents."""
     try:
-        if use_cache:
-            info = cache.cached("profile", symbol, lambda: _fetch_info(symbol),
-                                max_age_hours=CACHE_MAX_AGE_HOURS)
-            source = cache.freshness("profile", symbol)
-        else:
-            info = _fetch_info(symbol)
-            source = "live"
+        info, data_source = _load_profile_info(symbol, use_cache)
     except Exception:
-        info = {}
+        info, data_source = {}, "unavailable"
 
     return {
         "name": info.get("longName") or info.get("shortName") or symbol,
@@ -87,95 +99,133 @@ def fetch_profile(symbol, use_cache=True):
         "market_cap": info.get("marketCap"),
         "trailing_pe": info.get("trailingPE"),
         "price_to_book": info.get("priceToBook"),
-        "data_source": source if info else "unavailable",
+        "data_source": data_source if info else "unavailable",
         "shares_outstanding": info.get("sharesOutstanding"),
-        "business_summary": (info.get("longBusinessSummary") or "")[:1200] or None,
+        "business_summary": (
+            (info.get("longBusinessSummary") or "")[:1200] or None
+        ),
     }
 
 
 def valuation_history(prices, statements):
-    """P/E and P/B as they stood at each past fiscal year end.
-
-    Market value at a year end is that year's share count times the closing
-    price nearest to it; dividing by that year's profit and equity gives the
-    multiple the market was actually paying back then. That history is what
-    `ratios.valuation_vs_median` compares today's multiple against.
-    """
+    """Build historical P/E and P/B series from reported statements and prices."""
     empty = {"pe_history": None, "pb_history": None}
-    if prices is None or prices.empty or statements is None or statements.empty:
+
+    if prices is None or prices.empty:
+        return empty
+    if statements is None or statements.empty:
         return empty
     if "shares_outstanding" not in statements.columns:
         return empty
 
-    prices = _naive(prices).sort_index()
-    pe_values: dict[pd.Timestamp, float] = {}
-    pb_values: dict[pd.Timestamp, float] = {}
+    prices = _without_timezone(prices).sort_index()
+    pe_values = {}
+    pb_values = {}
 
     for period_end in statements.index:
-        window = prices.loc[:period_end]
-        if window.empty:
+        available_prices = prices.loc[:period_end]
+        if available_prices.empty:
             continue
-        # Ignore a price that is far from the year end rather than pairing a
-        # year-end profit with a price from a different era.
-        if (period_end - window.index[-1]).days > VALUATION_LOOKBACK_DAYS:
+
+        price_date = available_prices.index[-1]
+        if (period_end - price_date).days > VALUATION_LOOKBACK_DAYS:
             continue
-        price = float(window.iloc[-1])
+
         shares = statements.at[period_end, "shares_outstanding"]
         if pd.isna(shares) or shares <= 0:
             continue
+
+        price = float(available_prices.iloc[-1])
         market_value = price * float(shares)
 
-        profit = statements.at[period_end, ratios.NET_INCOME] \
-            if ratios.NET_INCOME in statements.columns else None
-        equity = statements.at[period_end, ratios.TOTAL_EQUITY] \
-            if ratios.TOTAL_EQUITY in statements.columns else None
+        profit = (
+            statements.at[period_end, ratios.NET_INCOME]
+            if ratios.NET_INCOME in statements.columns
+            else None
+        )
+        equity = (
+            statements.at[period_end, ratios.TOTAL_EQUITY]
+            if ratios.TOTAL_EQUITY in statements.columns
+            else None
+        )
 
         if profit is not None and not pd.isna(profit) and profit > 0:
             pe_values[period_end] = market_value / float(profit)
+
         if equity is not None and not pd.isna(equity) and equity > 0:
             pb_values[period_end] = market_value / float(equity)
 
     return {
-        "pe_history": pd.Series(pe_values).sort_index() if pe_values else None,
-        "pb_history": pd.Series(pb_values).sort_index() if pb_values else None,
+        "pe_history": (
+            pd.Series(pe_values).sort_index() if pe_values else None
+        ),
+        "pb_history": (
+            pd.Series(pb_values).sort_index() if pb_values else None
+        ),
     }
 
 
-def fetch_market_data(ticker, start=None, end=None, statements=None, use_cache=True):
-    """Everything price-related for one company, in one call.
+def _build_valuation_history(ticker, statements, use_cache):
+    """Fetch the wider price range required for historical valuation multiples."""
+    if statements is None or statements.empty:
+        return {"pe_history": None, "pb_history": None}
 
-    Fetches the stock over the requested window, the right index to judge it
-    against, the profile, and enough extra price history to rebuild the
-    valuation multiples of past years.
-    """
+    history_start = (
+        statements.index[0] - dt.timedelta(days=60)
+    ).date().isoformat()
+
+    prices = fetch_prices(ticker, history_start, None, use_cache)
+    if prices.empty:
+        return {"pe_history": None, "pb_history": None}
+
+    return valuation_history(prices, statements)
+
+
+def fetch_market_data(
+    ticker,
+    start=None,
+    end=None,
+    statements=None,
+    use_cache=True,
+):
+    """Return all market data needed by the data analyst agent."""
     prices = fetch_prices(ticker, start, end, use_cache)
+
     benchmark_symbol = kpi.benchmark_for(ticker)
-    benchmark_prices = fetch_prices(benchmark_symbol, start, end, use_cache)
+    benchmark_prices = fetch_prices(
+        benchmark_symbol,
+        start,
+        end,
+        use_cache,
+    )
+
     profile = fetch_profile(ticker, use_cache)
-
-    valuation = {"pe_history": None, "pb_history": None}
-    if statements is not None and not statements.empty:
-        # Valuation history needs prices going back to the earliest statement,
-        # which is usually further back than the window the user asked about.
-        history_start = (statements.index[0] - dt.timedelta(days=60)).date().isoformat()
-        wide_prices = fetch_prices(ticker, history_start, None, use_cache)
-        if not wide_prices.empty:
-            valuation = valuation_history(wide_prices, statements)
-
-    log.info("%s: %d price rows, benchmark %s (%d rows)",
-             ticker, len(prices), benchmark_symbol, len(benchmark_prices))
-
-    error = None
-    if prices.empty:
-        error = (f"No price data for {ticker} between {start} and {end}. "
-                 "Check the ticker symbol and the date range.")
+    valuation = _build_valuation_history(ticker, statements, use_cache)
 
     if prices.empty:
-        price_source = "unavailable"
-    elif use_cache:
-        price_source = cache.freshness("prices", f"{ticker}:{start}:{end}")
+        error = (
+            f"No price data for {ticker} between {start} and {end}. "
+            "Check the ticker symbol and the date range."
+        )
+        data_source = "unavailable"
     else:
-        price_source = "live"
+        error = None
+        data_source = (
+            cache.freshness(
+                "prices",
+                _price_cache_key(ticker, start, end),
+            )
+            if use_cache
+            else "live"
+        )
+
+    log.info(
+        "%s: %d price rows, benchmark %s (%d rows)",
+        ticker,
+        len(prices),
+        benchmark_symbol,
+        len(benchmark_prices),
+    )
 
     return {
         "prices": prices,
@@ -186,6 +236,6 @@ def fetch_market_data(ticker, start=None, end=None, statements=None, use_cache=T
         "pb_current": profile.get("price_to_book"),
         "pe_history": valuation["pe_history"],
         "pb_history": valuation["pb_history"],
-        "data_source": price_source,
+        "data_source": data_source,
         "error": error,
     }
