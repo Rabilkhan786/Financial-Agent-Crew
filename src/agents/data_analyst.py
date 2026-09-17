@@ -26,7 +26,7 @@ Use only the supplied numbers. Do not predict future prices.
 
 
 def run(crew_state):
-    """Fetch prices, calculate KPIs, draw charts, and explain the results."""
+    """Fetch prices, calculate KPIs, create charts, and explain the results."""
     ticker = crew_state["ticker"]
     market = market_data.fetch_market_data(
         ticker,
@@ -40,7 +40,6 @@ def run(crew_state):
             "analysis": {
                 "available": False,
                 "note": message,
-                "data_source": "unavailable",
             },
             "conversation_log": [
                 {"agent": "data_analyst", "message": message}
@@ -93,11 +92,8 @@ def run(crew_state):
             "trend": computed["trend"],
             "benchmark": benchmark,
             "benchmark_symbol": market["benchmark_symbol"],
-            "risk_free_rate": config.RISK_FREE_RATE,
-            "unavailable": computed["unavailable"],
             "price_series": computed["series"],
             "charts": chart_paths,
-            "data_source": market.get("data_source"),
             "interpretation": interpretation,
         },
         "conversation_log": [
