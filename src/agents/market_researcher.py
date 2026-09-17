@@ -33,9 +33,8 @@ def run(crew_state):
     company = crew_state.get("company") or ticker
     profile = crew_state.get("profile") or {}
 
-    news_result = news.fetch_news(ticker)
+    articles = news.fetch_news(ticker)
     social_result = social.fetch_social_posts(ticker)
-    articles = news_result.get("articles") or []
 
     headlines = "- no recent articles found"
     if articles:
