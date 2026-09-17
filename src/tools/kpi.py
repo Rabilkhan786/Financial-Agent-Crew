@@ -230,15 +230,10 @@ def compute_all(
     series = {}
     if priced is not None:
         series["close"] = priced
-
         for window in (MA_SHORT, MA_LONG):
             average = moving_average(priced, window)
             if average is not None and not average.dropna().empty:
                 series[f"ma_{window}"] = average
-
-        moves = daily_returns(priced)
-        if moves is not None:
-            series["daily_returns"] = moves
 
     return {
         "latest": values,
