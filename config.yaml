@@ -1,0 +1,22 @@
+llm:
+  model: "openai/gpt-oss-120b"
+  temperature: 0.2
+  timeout: 180
+  max_tokens: 4096
+
+analysis:
+  risk_free_rate: 0.0
+  statement_years: 5
+  news_limit: 10
+  social_limit: 30
+  min_social_posts: 5
+
+workflow:
+  max_revisions: 1
+  recursion_limit: 20
+
+paths:
+  output: "output"
+
+logging:
+  level: "INFO"
