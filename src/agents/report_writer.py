@@ -1,4 +1,4 @@
-"""Write the final report from the completed agent findings."""
+"""Write the final report from completed agent findings."""
 
 from src.components.logging import get_logger
 from src.core import llm
@@ -51,7 +51,7 @@ DISCLAIMER = (
 
 
 def run(crew_state):
-    """Combine agent outputs into one final report."""
+    """Combine the completed agent outputs into one report."""
     ticker = crew_state["ticker"]
     fundamentals = crew_state.get("fundamentals") or {}
     research = crew_state.get("research") or {}
@@ -62,12 +62,9 @@ def run(crew_state):
         fundamentals.get("currency"),
     )
     price_facts = formatting.facts_block(analysis.get("kpis") or {})
-
-    flags = fundamentals.get("red_flags") or []
-    flag_text = "\n".join(
-        f"- [{flag['severity']}] {flag['message']}"
-        for flag in flags
-    ) or "- none"
+    flag_text = formatting.red_flags_block(
+        fundamentals.get("red_flags") or []
+    )
 
     body = llm.ask(
         PROMPT.format(
